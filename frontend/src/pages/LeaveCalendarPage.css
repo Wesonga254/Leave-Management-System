@@ -1,0 +1,147 @@
+/* Leave Calendar Page Styles */
+.leave-calendar-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--medium-gray);
+}
+
+.header-content h1 {
+  font-size: 28px;
+  color: var(--dark-black);
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.header-subtitle {
+  color: var(--dark-gray);
+  font-size: 14px;
+  margin: 0;
+}
+
+.calendar-container {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--medium-gray);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.calendar-legend {
+  margin-top: 28px;
+  padding: 20px;
+  background: var(--light-gray);
+  border-radius: 10px;
+}
+
+.calendar-legend h3 {
+  margin-top: 0;
+  color: var(--dark-black);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.legend-items {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.3);
+  border: 2px solid #667eea;
+}
+
+.legend-item span {
+  color: var(--dark-black);
+  font-size: 14px;
+}
+
+.calendar-info {
+  margin-top: 28px;
+  padding: 20px;
+  background: #f0f4ff;
+  border-radius: 10px;
+  border-left: 4px solid var(--primary-blue);
+}
+
+.calendar-info h3 {
+  margin-top: 0;
+  color: var(--dark-black);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.info-content {
+  color: var(--dark-gray);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.info-content p {
+  margin: 0 0 12px 0;
+}
+
+.info-content p:last-child {
+  margin-bottom: 0;
+}
+
+.info-content a {
+  color: var(--primary-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.info-content a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .calendar-header {
+    margin-bottom: 20px;
+  }
+
+  .header-content h1 {
+    font-size: 24px;
+  }
+
+  .calendar-container {
+    padding: 16px;
+  }
+
+  .legend-items {
+    gap: 16px;
+  }
+
+  .calendar-legend,
+  .calendar-info {
+    margin-top: 20px;
+    padding: 16px;
+  }
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--dark-gray);
+  font-size: 16px;
+}

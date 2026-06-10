@@ -1,0 +1,345 @@
+.profile-dropdown {
+  position: relative;
+}
+
+.profile-button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.profile-button:hover,
+.profile-button.active {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.58);
+  transform: translateY(-1px);
+}
+
+.profile-button-text {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  line-height: 1.1;
+}
+
+.profile-button-text strong {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.profile-button-text small {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.profile-avatar {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #1c1c1c 0%, #2e9fd8 100%);
+  color: white;
+  font-weight: 800;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-sm {
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+}
+
+.profile-avatar-xl {
+  width: 88px;
+  height: 88px;
+  font-size: 26px;
+}
+
+.profile-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: 310px;
+  padding: 10px;
+  background: white;
+  border: 1px solid rgba(28, 28, 28, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 18px 42px rgba(28, 28, 28, 0.2);
+  z-index: 1000;
+}
+
+.profile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--medium-gray);
+  margin-bottom: 8px;
+}
+
+.profile-menu-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--dark-black);
+}
+
+.profile-menu-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--dark-gray);
+  overflow-wrap: anywhere;
+}
+
+.account-menu-item {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dark-black);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.account-menu-item:hover {
+  background: rgba(46, 159, 216, 0.1);
+  color: var(--primary-blue);
+}
+
+.account-menu-item.danger {
+  color: var(--danger);
+}
+
+.account-menu-item.danger:hover {
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.menu-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--light-gray);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 16, 20, 0.52);
+  z-index: 1500;
+}
+
+.profile-modal {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.32);
+}
+
+.profile-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px;
+  background: linear-gradient(135deg, #1c1c1c 0%, #2e9fd8 100%);
+  color: white;
+}
+
+.profile-modal-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.profile-modal-identity h2 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.profile-modal-identity p {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.profile-modal-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.profile-edit-form {
+  padding: 24px 26px 26px;
+}
+
+.profile-photo-control {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.profile-photo-control label,
+.profile-form-grid label {
+  color: var(--dark-black);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-form-grid label {
+  display: grid;
+  gap: 7px;
+}
+
+.profile-form-grid input,
+.profile-photo-control input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--medium-gray);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.profile-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.profile-readonly-grid span {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--light-gray);
+  color: var(--dark-gray);
+  font-size: 12px;
+}
+
+.profile-readonly-grid strong {
+  color: var(--dark-black);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.profile-message {
+  margin: 16px 0 0;
+  color: var(--primary-blue);
+  font-weight: 700;
+}
+
+.profile-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.profile-primary,
+.profile-secondary {
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 0;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.profile-primary {
+  background: var(--primary-blue);
+  color: white;
+}
+
+.profile-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.profile-secondary {
+  background: var(--light-gray);
+  color: var(--dark-black);
+}
+
+@media (max-width: 760px) {
+  .profile-button-text {
+    display: none;
+  }
+
+  .profile-panel {
+    right: -4px;
+    width: min(310px, calc(100vw - 22px));
+  }
+
+  .profile-modal-backdrop {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .profile-modal-header,
+  .profile-modal-identity {
+    align-items: flex-start;
+  }
+
+  .profile-modal-identity {
+    flex-direction: column;
+  }
+
+  .profile-form-grid,
+  .profile-readonly-grid {
+    grid-template-columns: 1fr;
+  }
+}

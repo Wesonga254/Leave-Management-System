@@ -1,0 +1,253 @@
+.notification-center {
+  position: relative;
+  display: inline-block;
+}
+
+.notification-bell {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--light-green);
+}
+
+.notification-bell:hover {
+  background-color: rgba(82, 183, 136, 0.14);
+  transform: scale(1.1);
+}
+
+.bell-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-block;
+  stroke-width: 2;
+}
+
+@keyframes bell-swing {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(15deg); }
+  75% { transform: rotate(-15deg); }
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #d32f2f;
+  color: white;
+  border-radius: 50%;
+  min-width: 18px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 1px solid white;
+}
+
+.notification-panel {
+  position: fixed;
+  right: 20px;
+  top: 70px;
+  width: 380px;
+  max-height: 500px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--medium-gray);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, var(--primary-blue) 0%, #005a96 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+}
+
+.notification-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.close-btn {
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+  transform: scale(1.2);
+}
+
+.notification-content {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(500px - 70px);
+}
+
+.notification-list {
+  padding: 0;
+}
+
+.notification-item {
+  display: flex;
+  padding: 12px 16px;
+  border-left: 4px solid var(--primary-blue);
+  border-bottom: 1px solid var(--light-gray);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.notification-item:hover {
+  background-color: var(--light-gray);
+  transform: translateX(4px);
+}
+
+.notification-icon {
+  font-size: 24px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+}
+
+.notification-details {
+  flex: 1;
+}
+
+.notification-details h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-black);
+}
+
+.date-info {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #7f8c8d;
+}
+
+.status-info {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #34495e;
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pending-info {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #f39c12;
+  font-weight: 500;
+}
+
+.approved-info {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #27ae60;
+  font-weight: 500;
+}
+
+.rejected-info {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #e74c3c;
+  font-weight: 500;
+}
+
+.loading {
+  padding: 24px 16px;
+  text-align: center;
+  color: #7f8c8d;
+}
+
+.empty-state {
+  padding: 40px 16px;
+  text-align: center;
+  color: #95a5a6;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Scrollbar styling */
+.notification-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notification-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.notification-content::-webkit-scrollbar-thumb {
+  background: #3498db;
+  border-radius: 3px;
+}
+
+.notification-content::-webkit-scrollbar-thumb:hover {
+  background: #2980b9;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .notification-panel {
+    position: fixed;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 400px;
+    top: 70px;
+  }
+}

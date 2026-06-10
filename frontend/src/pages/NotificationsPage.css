@@ -1,0 +1,137 @@
+.notifications-page {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.notifications-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 28px;
+  border-radius: 16px;
+  background: white;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.notifications-header h1 {
+  margin: 0;
+  color: var(--dark-black);
+  font-size: 28px;
+}
+
+.notifications-header p {
+  margin-top: 6px;
+  color: var(--dark-gray);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.unread-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--medium-gray);
+  border-radius: 8px;
+  background: #f8fafb;
+  color: var(--dark-black);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.unread-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.notifications-panel-page {
+  overflow: hidden;
+  border: 1px solid var(--medium-gray);
+  border-radius: 12px;
+  background: white;
+}
+
+.notifications-list-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.notification-row-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-left: 5px solid var(--primary-blue);
+  border-bottom: 1px solid var(--medium-gray);
+}
+
+.notification-row-page:last-child {
+  border-bottom: none;
+}
+
+.notification-row-page.unread {
+  background: #f7fbfe;
+  border-left-color: var(--light-green);
+}
+
+.notification-row-page.read {
+  border-left-color: #cbd5e1;
+}
+
+.notification-row-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.notification-row-heading h2 {
+  margin: 0;
+  color: var(--dark-black);
+  font-size: 16px;
+}
+
+.notification-row-heading span {
+  flex-shrink: 0;
+  color: var(--dark-gray);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notification-row-content p {
+  margin: 0;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.notifications-load-more {
+  padding: 16px;
+  text-align: center;
+  border-top: 1px solid var(--medium-gray);
+}
+
+@media (max-width: 700px) {
+  .notifications-header,
+  .notification-row-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notification-row-page {
+    grid-template-columns: 1fr;
+  }
+
+  .notifications-header {
+    padding: 22px;
+  }
+
+  .notification-row-heading span {
+    flex-shrink: 1;
+  }
+}
