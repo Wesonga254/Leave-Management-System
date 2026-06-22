@@ -1,49 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { reportService } from '../services/api';
-import { Line, Bar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-} from 'chart.js';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { reportService, leaveService, adminService } from '../services/api';
+import './ReportsPage.css';
 
 function ReportsPage() {
-  const [activeTab, setActiveTab] = useState('summary');
+  const userRole = localStorage.getItem('userRole') || 'employee';
+  const isDirector = userRole === 'director';
+  const [activeTab, setActiveTab] = useState('applications');
   const [summaryData, setSummaryData] = useState(null);
-  const [leaveBalanceData, setLeaveBalanceData] = useState([]);
-  const [monthlyTrends, setMonthlyTrends] = useState([]);
-  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [allApplications, setAllApplications] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [allDirectorates, setAllDirectorates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Filters for applications tab
+  const [deptFilter, setDeptFilter] = useState('');
+  const [directorateFilter, setDirFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedAppId, setExpandedAppId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  useEffect(() => {
+    fetchDepartments();
+    fetchDirectorates();
+  }, []);
 
   useEffect(() => {
     fetchReportData();
   }, [selectedYear, activeTab]);
 
+  const fetchDepartments = async () => {
+    try {
+      const res = await adminService.getDepartments();
+      if (res.data.success) setDepartments(res.data.data || []);
+    } catch { /* silent */ }
+  };
+
+  const fetchDirectorates = async () => {
+    try {
+      const res = await adminService.getDirectorates();
+      if (res.data.success) setAllDirectorates(res.data.data || []);
+    } catch { /* silent */ }
+  };
+
   const fetchReportData = async () => {
     setLoading(true);
     setError('');
     try {
+      if (activeTab === 'applications') {
+        const res = await leaveService.getApplications({ year: selectedYear });
+        setAllApplications(res.data.data || []);
+      }
+
       if (activeTab === 'summary') {
         const [summaryResponse, departmentResponse] = await Promise.all([
           reportService.getSummaryReport({ year: selectedYear }),
@@ -62,25 +72,86 @@ function ReportsPage() {
         });
       }
 
-      if (activeTab === 'balance') {
-        const balanceResponse = await reportService.getLeaveBalanceReport({ year: selectedYear });
-        setLeaveBalanceData(balanceResponse.data.data || []);
-      }
-
-      if (activeTab === 'trends') {
-        const trendsResponse = await reportService.getMonthlyTrends({ year: selectedYear });
-        setMonthlyTrends(trendsResponse.data.data || []);
-      }
-
-      if (activeTab === 'pending') {
-        const pendingResponse = await reportService.getPendingApprovals();
-        setPendingApprovals(pendingResponse.data.data || []);
-      }
     } catch (err) {
       setError('Error loading reports: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Directorates filtered by selected department
+  const filteredDirectorates = useMemo(() => {
+    if (!deptFilter) return [];
+    const dept = departments.find(d => d.name === deptFilter);
+    if (!dept) return [];
+    return allDirectorates.filter(dir => dir.department_id === dept.id);
+  }, [allDirectorates, departments, deptFilter]);
+
+  const filteredApplications = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    return allApplications.filter(app => {
+      if (deptFilter && (app.department || '') !== deptFilter) return false;
+      if (statusFilter && app.status !== statusFilter) return false;
+      if (needle) {
+        const empId = (app.employee_id || '').toLowerCase();
+        const fullName = `${app.first_name || ''} ${app.last_name || ''}`.toLowerCase();
+        if (!empId.includes(needle) && !fullName.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [allApplications, deptFilter, statusFilter, searchQuery]);
+
+  const getWorkflowSummary = useCallback((app) => {
+    const workflow = app.workflow || [];
+    if (workflow.length === 0) return { approver: '—', level: '—', decision: '—' };
+    const decided = workflow.find(w => ['approved', 'rejected'].includes(w.status));
+    if (decided) {
+      return {
+        approver: decided.approver_name || '—',
+        level: (decided.approval_level || '').replace(/_/g, ' '),
+        decision: decided.status,
+        date: decided.approved_at || decided.updated_at
+      };
+    }
+    const pending = workflow.find(w => w.status === 'pending');
+    if (pending) {
+      return {
+        approver: pending.approver_name || '—',
+        level: (pending.approval_level || '').replace(/_/g, ' '),
+        decision: 'pending',
+        date: null
+      };
+    }
+    return { approver: '—', level: '—', decision: '—' };
+  }, []);
+
+  const getStatusBadge = (status) => {
+    const colors = {
+      approved: '#ecfdf3',
+      pending: '#fffbeb',
+      rejected: '#fef2f2',
+      cancelled: '#f8fafc'
+    };
+    const textColors = {
+      approved: '#027a48',
+      pending: '#92400e',
+      rejected: '#b42318',
+      cancelled: '#475569'
+    };
+    return (
+      <span style={{
+        display: 'inline-block',
+        padding: '3px 8px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: 700,
+        background: colors[status] || '#f1f5f9',
+        color: textColors[status] || '#334155',
+        textTransform: 'capitalize'
+      }}>
+        {status}
+      </span>
+    );
   };
 
   const exportServerCSV = async () => {
@@ -102,96 +173,38 @@ function ReportsPage() {
     }
   };
 
-  const getChartData = () => {
-    if (monthlyTrends.length === 0) return null;
-
-    const months = [...new Set(monthlyTrends.map(t => t.month_name))];
-    const approvedData = months.map(month => {
-      const total = monthlyTrends
-        .filter(t => t.month_name === month)
-        .reduce((sum, t) => sum + (t.approved_count || t.approved || 0), 0);
-      return total;
-    });
-
-    return {
-      labels: months,
-      datasets: [
-        {
-          label: 'Approved Leaves',
-          data: approvedData,
-          borderColor: '#27ae60',
-          backgroundColor: 'rgba(39, 174, 96, 0.1)',
-          tension: 0.1
-        }
-      ]
-    };
-  };
-
-  const getLeaveTypeChartData = () => {
-    if (leaveBalanceData.length === 0) return null;
-
-    const leaveTypes = [...new Set(leaveBalanceData.map(b => b.leave_type))];
-    const usedDays = leaveTypes.map(type => {
-      const total = leaveBalanceData
-        .filter(b => b.leave_type === type)
-        .reduce((sum, b) => sum + (b.used_days || 0), 0);
-      return total;
-    });
-
-    return {
-      labels: leaveTypes,
-      datasets: [
-        {
-          label: 'Days Used',
-          data: usedDays,
-          backgroundColor: [
-            '#3498db',
-            '#e74c3c',
-            '#f39c12',
-            '#27ae60',
-            '#9b59b6',
-            '#1abc9c'
-          ]
-        }
-      ]
-    };
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: true,
-    plugins: {
-      legend: {
-        position: 'top'
-      },
-      title: {
-        display: true
-      }
-    }
-  };
-
   const formatDate = (value) => {
-    if (!value) return 'N/A';
+    if (!value) return '—';
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'N/A';
+    if (Number.isNaN(date.getTime())) return '—';
     return date.toLocaleDateString();
   };
 
   const exportCurrentTabAsCSV = () => {
     let rows = [];
     let filename = 'report.csv';
-    if (activeTab === 'summary') {
+    if (activeTab === 'applications') {
+      rows = filteredApplications.map(app => {
+        const wf = getWorkflowSummary(app);
+        return {
+          EmployeeNo: app.employee_id,
+          Name: `${app.first_name} ${app.last_name}`,
+          Department: app.department || '',
+          LeaveType: app.leave_type_name || app.leave_type || '',
+          StartDate: app.start_date,
+          EndDate: app.end_date,
+          Days: app.number_of_days,
+          Status: app.status,
+          Approver: wf.approver,
+          ApprovalLevel: wf.level,
+          Decision: wf.decision,
+          Submitted: app.created_at
+        };
+      });
+      filename = `leave_applications_${selectedYear}.csv`;
+    } else if (activeTab === 'summary') {
       rows = (summaryData?.by_department || []).map(d => ({ Department: d.department, TotalEmployees: d.total_employees, ApprovedLeaves: d.approved_leaves, DaysUsed: d.days_used || d.total_days_approved || 0 }));
       filename = `summary_${selectedYear}.csv`;
-    } else if (activeTab === 'balance') {
-      rows = leaveBalanceData.map(r => ({ Employee: `${r.first_name} ${r.last_name}`, EmployeeID: r.employee_id, Department: r.department, LeaveType: r.leave_type, TotalDays: r.total_days, UsedDays: r.used_days, Remaining: r.remaining_days }));
-      filename = `leave_balance_${selectedYear}.csv`;
-    } else if (activeTab === 'trends') {
-      rows = monthlyTrends.map(t => ({ Month: t.month_name, LeaveType: t.leave_type, TotalApplications: t.total_applications, Approved: t.approved_count || t.approved, Pending: t.pending_count || t.pending, Rejected: t.rejected_count || t.rejected, TotalDays: t.approved_days || t.total_days }));
-      filename = `monthly_trends_${selectedYear}.csv`;
-    } else if (activeTab === 'pending') {
-      rows = pendingApprovals.map(p => ({ Employee: `${p.first_name} ${p.last_name}`, EmployeeID: p.employee_id, LeaveType: p.leave_type, StartDate: p.start_date, EndDate: p.end_date, Days: p.number_of_days, ApprovalLevel: p.approval_level }));
-      filename = `pending_approvals_${selectedYear}.csv`;
     }
 
     if (rows.length === 0) {
@@ -210,68 +223,211 @@ function ReportsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPdf = async (applicationId) => {
+    try {
+      setDownloadingId(applicationId);
+      const response = await leaveService.downloadApplication(applicationId);
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `leave-application-${applicationId}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Error downloading PDF: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   return (
     <div>
       <div className="card">
-        <h2 className="card-title">Leave Management Reports</h2>
+        <h2 className="card-title">{isDirector ? 'Directorate Reports' : 'Leave Management Reports'}</h2>
 
         {error && <div className="alert alert-error">{error}</div>}
 
         <div className="report-tabs">
+          <button
+            className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`}
+            onClick={() => setActiveTab('applications')}
+          >
+            Applications
+          </button>
           <button
             className={`tab-btn ${activeTab === 'summary' ? 'active' : ''}`}
             onClick={() => setActiveTab('summary')}
           >
             Summary
           </button>
-          <button
-            className={`tab-btn ${activeTab === 'balance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('balance')}
-          >
-            Leave Balance
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'trends' ? 'active' : ''}`}
-            onClick={() => setActiveTab('trends')}
-          >
-            Monthly Trends
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pending')}
-          >
-            Pending Approvals
-          </button>
+
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="form-group">
-            <label htmlFor="year">Select Year:</label>
+        <div className="report-controls">
+          <div className="report-controls-left">
             <select
-              id="year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="report-select"
             >
               {[2024, 2025, 2026].map(year => (
                 <option key={year} value={year}>{year}</option>
               ))}
             </select>
+
+            {activeTab === 'applications' && (
+              <>
+                {!isDirector && (
+                  <>
+                    <select
+                      value={deptFilter}
+                      onChange={e => { setDeptFilter(e.target.value); setDirFilter(''); }}
+                      className="report-select"
+                    >
+                      <option value="">All departments</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
+                    </select>
+                    {deptFilter && filteredDirectorates.length > 0 && (
+                      <select
+                        value={directorateFilter}
+                        onChange={e => setDirFilter(e.target.value)}
+                        className="report-select"
+                      >
+                        <option value="">All directorates</option>
+                        {filteredDirectorates.map(d => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="report-select"
+                >
+                  <option value="">All statuses</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search by Employee No or name"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="report-search"
+                />
+              </>
+            )}
           </div>
 
-          <div>
+          <div className="report-controls-right">
             <button className="btn btn-outline" onClick={() => exportCurrentTabAsCSV()}>
-              Export CSV (client)
+              Export CSV
             </button>
-            <button className="btn btn-outline" style={{ marginLeft: 8 }} onClick={() => exportServerCSV()}>
-              Export CSV (server)
-            </button>
+            {activeTab !== 'applications' && (
+              <button className="btn btn-outline" onClick={() => exportServerCSV()}>
+                Export (server)
+              </button>
+            )}
           </div>
         </div>
+
+        {activeTab === 'applications' && !loading && (
+          <p className="report-result-count">{filteredApplications.length} of {allApplications.length} applications</p>
+        )}
 
         {loading ? (
           <div className="loading">Loading report data...</div>
         ) : (
           <>
+            {/* Applications Report */}
+            {activeTab === 'applications' && (
+              <div className="table-wrapper">
+                {filteredApplications.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>No applications found</h3>
+                    <p>Try adjusting your filters or search query.</p>
+                  </div>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Employee No</th>
+                        <th>Name</th>
+                        <th>Leave Type</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredApplications.map(app => {
+                        const wf = getWorkflowSummary(app);
+                        const isExpanded = expandedAppId === app.id;
+                        return (
+                          <React.Fragment key={app.id}>
+                            <tr>
+                              <td data-label="Employee No">{app.employee_id || '—'}</td>
+                              <td data-label="Name">{app.first_name} {app.last_name}</td>
+                              <td data-label="Leave Type">{app.leave_type_name || app.leave_type || '—'}</td>
+                              <td data-label="Days"><strong>{app.number_of_days}</strong></td>
+                              <td data-label="Status">{getStatusBadge(app.status)}</td>
+                              <td data-label="Actions">
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: 12, padding: '4px 12px' }}
+                                  onClick={() => setExpandedAppId(isExpanded ? null : app.id)}
+                                >
+                                  {isExpanded ? 'Close' : 'View'}
+                                </button>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="detail-row">
+                                <td colSpan="6">
+                                  <div className="report-detail-card">
+                                    <div className="report-detail-grid">
+                                      <div><span className="detail-label">Department</span><span className="detail-value">{app.department || '—'}</span></div>
+                                      <div><span className="detail-label">Start Date</span><span className="detail-value">{formatDate(app.start_date)}</span></div>
+                                      <div><span className="detail-label">End Date</span><span className="detail-value">{formatDate(app.end_date)}</span></div>
+                                      <div><span className="detail-label">Approver</span><span className="detail-value">{wf.approver}{wf.level && wf.level !== '—' ? ` (${wf.level})` : ''}</span></div>
+                                      <div><span className="detail-label">Decision Date</span><span className="detail-value">{wf.date ? formatDate(wf.date) : '—'}</span></div>
+                                      <div><span className="detail-label">Date Applied</span><span className="detail-value">{formatDate(app.created_at)}</span></div>
+                                    </div>
+                                    {app.reason && (
+                                      <div style={{ marginTop: 10 }}>
+                                        <span className="detail-label">Reason</span>
+                                        <p className="detail-value" style={{ marginTop: 2 }}>{app.reason}</p>
+                                      </div>
+                                    )}
+                                    <div style={{ marginTop: 12 }}>
+                                      <button
+                                        className="btn btn-primary"
+                                        style={{ fontSize: 12, padding: '6px 16px' }}
+                                        onClick={() => handleDownloadPdf(app.id)}
+                                        disabled={downloadingId === app.id}
+                                      >
+                                        {downloadingId === app.id ? 'Downloading...' : 'Download PDF'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
             {/* Summary Report */}
             {activeTab === 'summary' && summaryData && (
               <div>
@@ -298,7 +454,7 @@ function ReportsPage() {
                   </div>
                 </div>
 
-                <h3 style={{ marginTop: '30px' }}>Department Summary</h3>
+                <h3 style={{ marginTop: '30px' }}>{isDirector ? 'Directorate Summary' : 'Department Summary'}</h3>
                 <table className="table">
                   <thead>
                     <tr>
@@ -322,119 +478,6 @@ function ReportsPage() {
               </div>
             )}
 
-            {/* Leave Balance Report */}
-            {activeTab === 'balance' && (
-              <div>
-                {leaveBalanceData.length > 0 && getLeaveTypeChartData() && (
-                  <div style={{ marginBottom: '40px' }}>
-                    <Bar data={getLeaveTypeChartData()} options={chartOptions} />
-                  </div>
-                )}
-
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Employee ID</th>
-                      <th>Department</th>
-                      <th>Leave Type</th>
-                      <th>Total Days</th>
-                      <th>Used Days</th>
-                      <th>Remaining Days</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaveBalanceData.map(balance => (
-                      <tr key={balance.id}>
-                        <td>{balance.first_name} {balance.last_name}</td>
-                        <td>{balance.employee_id}</td>
-                        <td>{balance.department}</td>
-                        <td>{balance.leave_type}</td>
-                        <td>{balance.total_days}</td>
-                        <td>{balance.used_days}</td>
-                        <td><strong>{balance.remaining_days}</strong></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Monthly Trends Report */}
-            {activeTab === 'trends' && (
-              <div>
-                {monthlyTrends.length > 0 && getChartData() && (
-                  <div style={{ marginBottom: '40px' }}>
-                    <Line data={getChartData()} options={chartOptions} />
-                  </div>
-                )}
-
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Month</th>
-                      <th>Leave Type</th>
-                      <th>Total Applications</th>
-                      <th>Approved</th>
-                      <th>Pending</th>
-                      <th>Rejected</th>
-                      <th>Total Days</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthlyTrends.map((trend, idx) => (
-                      <tr key={idx}>
-                        <td>{trend.month_name}</td>
-                        <td>{trend.leave_type}</td>
-                        <td>{trend.total_applications}</td>
-                        <td>{trend.approved_count || trend.approved || 0}</td>
-                        <td>{trend.pending_count || trend.pending || 0}</td>
-                        <td>{trend.rejected_count || trend.rejected || 0}</td>
-                        <td>{trend.approved_days || trend.total_days || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Pending Approvals Report */}
-            {activeTab === 'pending' && (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Employee ID</th>
-                    <th>Leave Type</th>
-                    <th>Start Date</th>
-                    <th>End Date</th>
-                    <th>Days</th>
-                    <th>Approval Level</th>
-                    <th>Submitted</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingApprovals.length > 0 ? (
-                    pendingApprovals.map(approval => (
-                      <tr key={approval.id}>
-                        <td>{approval.first_name} {approval.last_name}</td>
-                        <td>{approval.employee_id}</td>
-                        <td>{approval.leave_type}</td>
-                        <td>{formatDate(approval.start_date)}</td>
-                        <td>{formatDate(approval.end_date)}</td>
-                        <td>{approval.number_of_days}</td>
-                        <td>{approval.approval_level}</td>
-                        <td>{formatDate(approval.submitted_date || approval.submitted_at || approval.created_at)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="8" style={{ textAlign: 'center' }}>No pending approvals</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
           </>
         )}
       </div>
@@ -442,9 +485,10 @@ function ReportsPage() {
       <style>{`
         .report-tabs {
           display: flex;
-          gap: 10px;
+          gap: 4px;
           margin-bottom: 20px;
           border-bottom: 2px solid #ecf0f1;
+          flex-wrap: wrap;
         }
 
         .tab-btn {
@@ -456,6 +500,7 @@ function ReportsPage() {
           color: #7f8c8d;
           border-bottom: 3px solid transparent;
           transition: all 0.3s;
+          white-space: nowrap;
         }
 
         .tab-btn:hover {
@@ -465,6 +510,64 @@ function ReportsPage() {
         .tab-btn.active {
           color: #3498db;
           border-bottom-color: #3498db;
+        }
+
+        .report-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+
+        .report-controls-left {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+          flex: 1;
+        }
+
+        .report-controls-right {
+          display: flex;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .report-select {
+          height: 38px;
+          padding: 6px 12px;
+          border: 1px solid #d0d5dd;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          min-width: 160px;
+        }
+
+        .report-search {
+          height: 38px;
+          padding: 6px 12px;
+          border: 1px solid #d0d5dd;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          min-width: 220px;
+          flex: 1;
+        }
+
+        .report-select:focus,
+        .report-search:focus {
+          outline: none;
+          border-color: var(--county-blue, #2D6BB0);
+          box-shadow: 0 0 0 2px rgba(45, 107, 176, 0.08);
+        }
+
+        .report-result-count {
+          font-size: 12px;
+          color: var(--dark-gray, #6b7280);
+          font-weight: 600;
+          margin: -8px 0 12px;
         }
       `}</style>
     </div>

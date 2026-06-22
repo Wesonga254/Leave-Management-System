@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leaveService, attachmentService } from '../services/api';
+import { triggerNotificationRefresh } from '../components/NotificationCenter';
 import './LeaveHistoryPage.css';
 
 function LeaveHistoryPage() {
@@ -41,6 +42,7 @@ function LeaveHistoryPage() {
     try {
       setLoading(true);
       const params = {
+        scope: 'own',
         ...(filterStatus && { status: filterStatus })
       };
       const response = await leaveService.getApplications(params);
@@ -103,6 +105,7 @@ function LeaveHistoryPage() {
             ? { ...app, status: 'cancelled' }
             : app
         ));
+        triggerNotificationRefresh();
         alert('Application cancelled successfully');
       } catch (err) {
         alert('Error cancelling application: ' + err.message);
@@ -159,7 +162,7 @@ function LeaveHistoryPage() {
       const url = window.URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `leave-application-${applicationId}.txt`;
+      link.download = `leave-application-${applicationId}.pdf`;
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
@@ -184,6 +187,7 @@ function LeaveHistoryPage() {
       setEditingApplication(null);
       setEditForm({});
       await fetchApplications();
+      triggerNotificationRefresh();
       alert('Application updated successfully');
     } catch (err) {
       alert('Error updating application: ' + (err.response?.data?.message || err.message));
@@ -219,6 +223,10 @@ function LeaveHistoryPage() {
   const getStatusBadge = (status) => {
     const badgeClass = `badge badge-${status}`;
     return <span className={badgeClass}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>;
+  };
+
+  const getDecisionStep = (app) => {
+    return (app.workflow || []).find(step => ['approved', 'rejected'].includes(step.status));
   };
 
   return (
@@ -321,8 +329,6 @@ function LeaveHistoryPage() {
                   <th>Leave Type</th>
                   <th>Dates</th>
                   <th>Days</th>
-                  <th>Working Days</th>
-                  <th>Reason</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -340,8 +346,6 @@ function LeaveHistoryPage() {
                         </small>
                       </td>
                       <td><strong>{app.number_of_days}</strong></td>
-                      <td><strong>{calculateWorkingDays(app.start_date, app.end_date)}</strong></td>
-                      <td>{app.reason ? app.reason.substring(0, 50) + (app.reason.length > 50 ? '...' : '') : '-'}</td>
                       <td>{getStatusBadge(app.status)}</td>
                       <td className="actions-cell">
                         <div className="actions-buttons">
@@ -352,47 +356,6 @@ function LeaveHistoryPage() {
                           >
                             {expandedApplication === app.id ? 'Hide' : 'View'}
                           </button>
-                          <button
-                            className="btn-action-attachments"
-                            title="Download filled application"
-                            onClick={() => handleDownloadApplication(app.id)}
-                          >
-                            Download
-                          </button>
-                          {app.status === 'rejected' && (
-                            <button
-                              className="btn-action-reapply"
-                              title="Reapply with same details"
-                              onClick={() => handleReapply(app.id)}
-                            >
-                              Reapply
-                            </button>
-                          )}
-                          <button
-                            className="btn-action-attachments"
-                            title="View attachments"
-                            onClick={() => handleViewAttachments(app.id)}
-                          >
-                            Attachments
-                          </button>
-                          {app.status === 'pending' && (
-                            <>
-                              <button
-                                className="btn-action-reapply"
-                                title="Edit application"
-                                onClick={() => startEditing(app)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="btn-action-cancel"
-                                title="Cancel application"
-                                onClick={() => handleCancel(app.id)}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -400,21 +363,40 @@ function LeaveHistoryPage() {
                     {/* Expanded Details Row */}
                     {expandedApplication === app.id && (
                       <tr className="expanded-row">
-                        <td colSpan="7">
+                        <td colSpan="5">
                           <div className="expanded-content">
                             <div className="detail-section">
-                              <h4>Filled Application Form</h4>
+                              <h4>Application Details</h4>
                               <p><strong>Leave Type:</strong> {app.leave_type_name || app.leave_type || 'N/A'}</p>
                               <p><strong>Start Date:</strong> {new Date(app.start_date).toLocaleDateString()}</p>
                               <p><strong>End Date:</strong> {new Date(app.end_date).toLocaleDateString()}</p>
-                              <p><strong>Days:</strong> {app.number_of_days}</p>
-                              <p><strong>Reason:</strong> {app.reason || 'No reason provided'}</p>
-                              <p><strong>Status:</strong> {app.status}</p>
+                              <p><strong>Requested Days:</strong> {app.requested_days || app.number_of_days}</p>
+                              {app.status === 'approved' && (
+                                <p><strong>Approved Days:</strong> {app.approved_days || app.number_of_days}</p>
+                              )}
+                              <p><strong>Status:</strong> {getStatusBadge(app.status)}</p>
+                              {getDecisionStep(app) && (
+                                <>
+                                  <p><strong>Supervisor:</strong> {getDecisionStep(app).approver_name || 'N/A'}</p>
+                                  <p><strong>Supervisor Comments:</strong> {getDecisionStep(app).comments || 'No comments provided'}</p>
+                                </>
+                              )}
                               <p><strong>Submitted:</strong> {new Date(app.created_at).toLocaleDateString()}</p>
-                              <div className="actions-buttons">
-                                <button className="btn-action-attachments" onClick={() => handleDownloadApplication(app.id)}>Download</button>
-                                {app.status === 'pending' && <button className="btn-action-reapply" onClick={() => startEditing(app)}>Edit</button>}
-                                {app.status === 'pending' && <button className="btn-action-cancel" onClick={() => handleCancel(app.id)}>Cancel</button>}
+
+                              {/* Status-aware action buttons */}
+                              <div className="actions-buttons" style={{ marginTop: '12px' }}>
+                                {app.status === 'pending' && (
+                                  <>
+                                    <button className="btn-action-reapply" onClick={() => startEditing(app)}>Edit</button>
+                                    <button className="btn-action-cancel" onClick={() => handleCancel(app.id)}>Cancel</button>
+                                  </>
+                                )}
+                                {app.status === 'approved' && (
+                                  <button className="btn-action-attachments" onClick={() => handleDownloadApplication(app.id)}>Download</button>
+                                )}
+                                {app.status === 'rejected' && (
+                                  <button className="btn-action-reapply" onClick={() => handleReapply(app.id)}>Reapply</button>
+                                )}
                               </div>
                             </div>
 
@@ -463,23 +445,29 @@ function LeaveHistoryPage() {
                               </div>
                             )}
 
-                            {attachments[app.id] && attachments[app.id].length > 0 && (
+                            {/* Show attachments for pending applications (view only, no download) */}
+                            {app.status === 'pending' && (
                               <div className="detail-section">
-                                <h4>Attachments ({attachments[app.id].length})</h4>
-                                <div className="attachment-list">
-                                  {attachments[app.id].map(att => (
-                                    <div key={att.id} className="attachment-item">
-                                      <span className="att-name">{att.filename}</span>
-                                      <span className="att-size">({(att.file_size / 1024).toFixed(2)} KB)</span>
-                                      <button
-                                        className="btn-icon-tiny"
-                                        onClick={() => handleDownloadAttachment(att.id)}
-                                        title="Download"
-                                      >
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
+                                <button
+                                  className="btn-action-attachments"
+                                  onClick={() => handleViewAttachments(app.id)}
+                                  style={{ marginBottom: '8px' }}
+                                >
+                                  View Attachments
+                                </button>
+                                {attachments[app.id] && attachments[app.id].length > 0 && (
+                                  <div className="attachment-list">
+                                    {attachments[app.id].map(att => (
+                                      <div key={att.id} className="attachment-item">
+                                        <span className="att-name">{att.filename}</span>
+                                        <span className="att-size">({(att.file_size / 1024).toFixed(2)} KB)</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {attachments[app.id] && attachments[app.id].length === 0 && (
+                                  <p style={{ color: '#64748b', fontSize: '13px' }}>No attachments uploaded.</p>
+                                )}
                               </div>
                             )}
                           </div>

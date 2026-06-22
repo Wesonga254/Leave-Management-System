@@ -1,9 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './DashboardPage.css';
 import { leaveService } from '../services/api';
 
+import ApplicationTracker from '../components/ApplicationTracker';
+
+const LEAVE_TYPE_COLORS = [
+  { bg: '#E8F5E9', border: '#1B7340', text: '#145A32' },
+  { bg: '#eff6ff', border: '#2563eb', text: '#1e40af' },
+  { bg: '#fefce8', border: '#ca8a04', text: '#854d0e' },
+  { bg: '#fdf2f8', border: '#db2777', text: '#9d174d' },
+  { bg: '#f5f3ff', border: '#7c3aed', text: '#5b21b6' },
+  { bg: '#ecfdf5', border: '#059669', text: '#145A32' },
+  { bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+];
+
 function DashboardPage() {
   const [leaveBalance, setLeaveBalance] = useState([]);
+  const [leaveTypes, setLeaveTypes] = useState([]);
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -11,6 +24,7 @@ function DashboardPage() {
 
   useEffect(() => {
     fetchLeaveBalance();
+    fetchLeaveTypes();
     fetchApplications();
     const interval = setInterval(fetchApplications, 5000);
     return () => clearInterval(interval);
@@ -27,9 +41,18 @@ function DashboardPage() {
     }
   };
 
+  const fetchLeaveTypes = async () => {
+    try {
+      const response = await leaveService.getLeaveTypes();
+      setLeaveTypes(response.data.data || []);
+    } catch (err) {
+      console.error('Error loading leave types:', err);
+    }
+  };
+
   const fetchApplications = async () => {
     try {
-      const response = await leaveService.getApplications();
+      const response = await leaveService.getApplications({ scope: 'own' });
       setApplications(response.data.data || []);
     } catch (err) {
       console.error('Error loading applications:', err);
@@ -48,64 +71,7 @@ function DashboardPage() {
 
   getApprovalSummary();
 
-  const prettifyStep = (value = '') => {
-    const labels = {
-      supervisor: 'Supervisor Review',
-      hr: 'HR Notified',
-      chief_officer: 'Chief Officer',
-      director: 'Director Approval'
-    };
-    return labels[value] || value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
-  };
 
-  const getTrackerState = (step, index, applicationStatus) => {
-    const status = (step.status || '').toLowerCase();
-    const finalStatus = (applicationStatus || '').toLowerCase();
-
-    if (status === 'approved') return 'complete';
-    if (status === 'rejected' || finalStatus === 'rejected') return status === 'rejected' ? 'rejected' : 'waiting';
-    if (finalStatus === 'cancelled' || finalStatus === 'canceled') return index === 0 ? 'complete' : 'waiting';
-
-    const firstPendingIndex = (applications[0]?.workflow || []).findIndex(item => (item.status || '').toLowerCase() === 'pending');
-    if (status === 'pending' && index === firstPendingIndex) return 'active';
-    if (status === 'not_required') return 'waiting';
-    return 'waiting';
-  };
-
-  const getTrackerSteps = (application) => {
-    const workflow = application?.workflow || [];
-    if (workflow.length > 0) {
-      return [
-        { label: 'Submitted', state: 'complete', note: application.created_at },
-        ...workflow.map((step, index) => ({
-          label: prettifyStep(step.approval_level),
-          state: getTrackerState(step, index, application.status),
-          note: step.approved_at || step.updated_at,
-          comments: step.comments
-        }))
-      ];
-    }
-
-    const status = application?.status || 'pending';
-    const normalized = status.toLowerCase();
-    const steps = ['Submitted', 'Supervisor Review', 'Approved'];
-
-    if (normalized === 'approved') {
-      return steps.map(label => ({ label, state: 'complete' }));
-    }
-
-    if (normalized === 'rejected' || normalized === 'cancelled' || normalized === 'canceled') {
-      return steps.map((label, index) => ({
-        label,
-        state: index === 0 ? 'complete' : index === 1 ? 'rejected' : 'waiting'
-      }));
-    }
-
-    return steps.map((label, index) => ({
-      label,
-      state: index === 0 ? 'complete' : index === 1 ? 'active' : 'waiting'
-    }));
-  };
 
   return (
     <div className="dashboard">
@@ -118,31 +84,34 @@ function DashboardPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="stats-grid">
-        <div className="stat-card stat-card-total">
-          <div className="stat-content">
-            <h3>Total Leave Days</h3>
-            <div className="number">
-              {leaveBalance.reduce((sum, balance) => sum + (balance.total_days || balance.annual_limit || 0), 0)}
-            </div>
+      {/* Leave Type Entitlements */}
+      <div className="leave-entitlements-section">
+        {loading ? (
+          <div className="loading">Loading...</div>
+        ) : (
+          <div className="leave-entitlements-grid">
+            {leaveTypes.map((lt, index) => {
+              const color = LEAVE_TYPE_COLORS[index % LEAVE_TYPE_COLORS.length];
+              return (
+                <div
+                  className="leave-entitlement-card"
+                  key={lt.id}
+                  style={{
+                    background: color.bg,
+                    borderTop: `4px solid ${color.border}`
+                  }}
+                >
+                  <div className="entitlement-info">
+                    <span className="entitlement-name">{lt.name}</span>
+                    <span className="entitlement-days" style={{ color: color.text }}>
+                      {lt.annual_limit} <small>Days</small>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-        <div className="stat-card stat-card-used">
-          <div className="stat-content">
-            <h3>Days Used</h3>
-            <div className="number">
-              {leaveBalance.reduce((sum, balance) => sum + balance.used_days, 0)}
-            </div>
-          </div>
-        </div>
-        <div className="stat-card stat-card-remaining">
-          <div className="stat-content">
-            <h3>Remaining Days</h3>
-            <div className="number">
-              {leaveBalance.reduce((sum, balance) => sum + balance.remaining_days, 0)}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Approval Status Section - Line Form */}
@@ -169,25 +138,21 @@ function DashboardPage() {
         )}
       </div>
 
+      {/* Application Tracker for each recent application */}
       {applications.length > 0 && (
         <div className="status-tracker-card">
           <div className="tracker-heading">
             <h2 className="section-title">Application Status Tracker</h2>
-            <span>{applications[0].leave_type_name || applications[0].leave_type}</span>
           </div>
-          <div className="status-tracker" aria-label="Latest application approval progress">
-            {getTrackerSteps(applications[0]).map((step, index) => (
-              <div className={`tracker-step tracker-${step.state}`} key={step.label}>
-                <span className="tracker-dot">{index + 1}</span>
-                <span className="tracker-label">{step.label}</span>
-                {step.note && <small>{new Date(step.note).toLocaleString()}</small>}
-                {step.comments && <small>{step.comments}</small>}
-              </div>
-            ))}
-          </div>
+          {applications.slice(0, 3).map(app => (
+            <ApplicationTracker key={app.id} application={app} />
+          ))}
         </div>
       )}
 
+
+
+      {/* Leave Balance Cards */}
       <div className="card">
         <h2 className="card-title">Leave Balance by Type</h2>
         {loading ? (
@@ -195,34 +160,32 @@ function DashboardPage() {
         ) : leaveBalance.length === 0 ? (
           <div className="empty-state">No leave balance found</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Leave Type</th>
-                <th>Total Days</th>
-                <th>Days Used</th>
-                <th>Remaining Days</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaveBalance.map(balance => (
-                <tr key={balance.id}>
-                  <td className="leave-type-cell">
-                    <strong>{balance.leave_type_name}</strong>
-                  </td>
-                  <td>{balance.total_days || balance.annual_limit || 0}</td>
-                  <td>{balance.used_days}</td>
-                  <td><strong className="remaining-days">{balance.remaining_days}</strong></td>
-                  <td>
-                    <span className={`status-tag ${balance.remaining_days > 0 ? 'status-available' : 'status-exhausted'}`}>
-                      {balance.remaining_days > 0 ? 'Available' : 'Exhausted'}
+          <div className="balance-cards-grid">
+            {leaveBalance.map(balance => {
+              const total = balance.total_days || balance.annual_limit || 0;
+              const used = balance.used_days || 0;
+              const remaining = balance.remaining_days || 0;
+              const usedPercent = total > 0 ? Math.round((used / total) * 100) : 0;
+              return (
+                <div className="balance-type-card" key={balance.id}>
+                  <div className="balance-type-header">
+                    <span className="balance-type-name">{balance.leave_type_name}</span>
+                    <span className={`balance-type-status ${remaining > 0 ? 'available' : 'exhausted'}`}>
+                      {remaining > 0 ? 'Available' : 'Exhausted'}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="balance-type-total">{total} <small>Days</small></div>
+                  <div className="balance-type-bar">
+                    <div className="balance-type-bar-fill" style={{ width: `${usedPercent}%` }}></div>
+                  </div>
+                  <div className="balance-type-meta">
+                    <span>{used} used</span>
+                    <span><strong>{remaining} remaining</strong></span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

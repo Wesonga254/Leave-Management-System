@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { authService, leaveService, attachmentService, adminService } from '../services/api';
+import { filterLeaveTypesByGender } from '../utils/leaveTypeGender';
+import { showToast } from './Toast';
+import { triggerNotificationRefresh } from './NotificationCenter';
+import DateInput from './DateInput';
 import './LeaveApplicationForm.css';
 
 function LeaveApplicationForm() {
@@ -11,19 +15,18 @@ function LeaveApplicationForm() {
     designation: '',
     contact_number: ''
   });
+  const todayISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const [profile, setProfile] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState({});
   const [numberOfDays, setNumberOfDays] = useState(0);
   const [holidays, setHolidays] = useState([]);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [submittedApplicationId, setSubmittedApplicationId] = useState(null);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const applicableLeaveTypes = filterLeaveTypesByGender(leaveTypes, profile.gender);
   const [pendingFiles, setPendingFiles] = useState([]);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const designations = ['HR', 'Chief Officer', 'Supervisor'];
   const documentUploadLeaveKeywords = ['compassion', 'study', 'sick'];
@@ -58,11 +61,7 @@ function LeaveApplicationForm() {
     }
   }, [formData.start_date, formData.end_date, holidays]);
 
-  useEffect(() => {
-    if (submittedApplicationId) {
-      fetchUploadedFiles();
-    }
-  }, [submittedApplicationId]);
+
 
   const fetchLeaveTypes = async () => {
     try {
@@ -88,7 +87,7 @@ function LeaveApplicationForm() {
 
   const fetchHolidays = async () => {
     try {
-      const res = await adminService.getHolidays();
+      const res = await leaveService.getHolidays();
       if (res.data.success) setHolidays(res.data.data || []);
     } catch (err) {
       // ignore
@@ -160,27 +159,6 @@ function LeaveApplicationForm() {
     setPendingFiles(pendingFiles.filter((_, i) => i !== index));
   };
 
-  const fetchUploadedFiles = async () => {
-    if (!submittedApplicationId) return;
-    try {
-      const response = await attachmentService.getAttachments(submittedApplicationId);
-      setUploadedFiles(response.data.data);
-    } catch (err) {
-      console.error('Error loading files');
-    }
-  };
-
-  const handleDeleteFile = async (fileId) => {
-    if (window.confirm('Are you sure you want to delete this file?')) {
-      try {
-        await attachmentService.deleteAttachment(fileId);
-        await fetchUploadedFiles();
-      } catch (err) {
-        setError('Error deleting file');
-      }
-    }
-  };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -189,10 +167,10 @@ function LeaveApplicationForm() {
     }));
   };
 
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     
     // Validate form data
     if (!formData.leave_type_id || !formData.start_date || !formData.end_date || !formData.reason) {
@@ -205,16 +183,27 @@ function LeaveApplicationForm() {
       return;
     }
 
-    const selectedType = leaveTypes.find(t => t.id === parseInt(formData.leave_type_id));
+    if (balanceValidationMessage) {
+      setError(balanceValidationMessage);
+      return;
+    }
+
+    const selectedType = applicableLeaveTypes.find(t => t.id === parseInt(formData.leave_type_id));
     const leaveName = (selectedType?.name || '').toLowerCase();
     const requiresDocumentUpload = documentUploadLeaveKeywords.some(keyword => leaveName.includes(keyword));
     if (requiresDocumentUpload) {
-      if (pendingFiles.length === 0 && uploadedFiles.length === 0) {
+      if (pendingFiles.length === 0) {
         setError('This leave type requires supporting documents. Please attach files before submitting.');
         return;
       }
     }
 
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmation(true);
+  };
+
+  const confirmSubmit = async () => {
+    setShowConfirmation(false);
     setLoading(true);
 
     try {
@@ -225,7 +214,7 @@ function LeaveApplicationForm() {
       };
       const response = await leaveService.submitApplication(submitData);
       const applicationId = response.data.application_id;
-      setSubmittedApplicationId(applicationId);
+
 
       // Upload pending files if any
       if (pendingFiles.length > 0) {
@@ -239,11 +228,14 @@ function LeaveApplicationForm() {
             console.error('Error uploading file:', file.name);
           }
         }
-        setSuccess('Leave application submitted successfully! Supporting documents have been uploaded.');
+        showToast('Leave application submitted successfully! Documents uploaded.', 'success');
         setPendingFiles([]);
       } else {
-        setSuccess('Leave application submitted successfully!');
+        showToast('Leave application submitted successfully!', 'success');
       }
+
+      // Immediately refresh notification bell so user sees their new notification
+      triggerNotificationRefresh();
 
       setFormData({
         leave_type_id: '',
@@ -261,9 +253,21 @@ function LeaveApplicationForm() {
   };
 
   const currentBalance = formData.leave_type_id ? leaveBalance[formData.leave_type_id] : null;
-  const selectedLeaveType = leaveTypes.find(type => type.id === parseInt(formData.leave_type_id));
+  const selectedLeaveType = applicableLeaveTypes.find(type => type.id === parseInt(formData.leave_type_id));
   const selectedLeaveName = (selectedLeaveType?.name || '').toLowerCase();
   const showDocumentUpload = documentUploadLeaveKeywords.some(keyword => selectedLeaveName.includes(keyword));
+  const availableDays = currentBalance?.remaining_days ?? 0;
+  const balanceValidationMessage = formData.leave_type_id && numberOfDays > 0 && currentBalance && numberOfDays > availableDays
+    ? `You do not have enough leave days. Available balance: ${availableDays} days, Requested: ${numberOfDays} days.`
+    : '';
+  const requestSummaryItems = [
+    ['Leave Type', selectedLeaveType?.name || 'Select a leave type'],
+    ['Start Date', formData.start_date || 'Not selected'],
+    ['End Date', formData.end_date || 'Not selected'],
+    ['Working Days', numberOfDays ? `${numberOfDays} day(s)` : 'Calculated after dates'],
+    ['Available Balance', currentBalance ? `${availableDays} day(s)` : 'Select a leave type'],
+    ['Supporting Files', `${pendingFiles.length} file(s)`]
+  ];
   useEffect(() => {
     if (!showDocumentUpload) {
       setSelectedFile(null);
@@ -280,7 +284,6 @@ function LeaveApplicationForm() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
 
       <form onSubmit={handleSubmit} className="leave-form">
         {/* Combined Application Form with Document Upload */}
@@ -302,7 +305,7 @@ function LeaveApplicationForm() {
               className="form-control"
             >
               <option value="">Select your leave type</option>
-              {leaveTypes.map(type => (
+              {applicableLeaveTypes.map(type => (
                 <option key={type.id} value={type.id}>{type.name}</option>
               ))}
             </select>
@@ -317,6 +320,7 @@ function LeaveApplicationForm() {
               </div>
             </div>
           )}
+          {balanceValidationMessage && <div className="alert alert-error">{balanceValidationMessage}</div>}
 
           {/* Dates Selection */}
           <div className="form-row">
@@ -325,14 +329,14 @@ function LeaveApplicationForm() {
                 Start Date
                 <span className="required">*</span>
               </label>
-              <input
-                type="date"
+              <DateInput
                 id="start_date"
                 name="start_date"
                 value={formData.start_date}
                 onChange={handleChange}
                 required
-                className="form-control"
+                min={todayISO}
+                placeholder="Select start date"
               />
             </div>
             <div className="form-group">
@@ -340,14 +344,14 @@ function LeaveApplicationForm() {
                 End Date
                 <span className="required">*</span>
               </label>
-              <input
-                type="date"
+              <DateInput
                 id="end_date"
                 name="end_date"
                 value={formData.end_date}
                 onChange={handleChange}
                 required
-                className="form-control"
+                min={formData.start_date || todayISO}
+                placeholder="Select end date"
               />
             </div>
           </div>
@@ -478,8 +482,6 @@ function LeaveApplicationForm() {
                   setSelectedFile(null);
                   resetFileInput();
                   setError('');
-                  setSuccess('');
-                  setSubmittedApplicationId(null);
                 }
               }}
             >
@@ -487,17 +489,55 @@ function LeaveApplicationForm() {
             </button>
           </div>
         </div>
+      </form>
 
-        {/* Success Message Section */}
-        {submittedApplicationId && (
-          <div className="form-section form-section-success">
-            <div className="success-section">
-              <h4>Application Submitted Successfully!</h4>
-              <p>Your leave application has been submitted successfully.</p>
+      {/* Confirmation Modal */}
+      {showConfirmation && (
+        <div className="leave-confirm-backdrop" onClick={() => setShowConfirmation(false)}>
+          <div className="leave-confirm-modal" onClick={e => e.stopPropagation()}>
+            <h3 className="leave-confirm-title">Confirm Leave Application</h3>
+            <p className="leave-confirm-subtitle">Please review the details below before submitting.</p>
+
+            <div className="leave-confirm-details">
+              <div className="leave-confirm-row">
+                <span className="leave-confirm-label">Leave Type</span>
+                <span className="leave-confirm-value">{selectedLeaveType?.name || '—'}</span>
+              </div>
+              <div className="leave-confirm-row">
+                <span className="leave-confirm-label">Start Date</span>
+                <span className="leave-confirm-value">{formData.start_date ? new Date(formData.start_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
+              </div>
+              <div className="leave-confirm-row">
+                <span className="leave-confirm-label">End Date</span>
+                <span className="leave-confirm-value">{formData.end_date ? new Date(formData.end_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
+              </div>
+              <div className="leave-confirm-row">
+                <span className="leave-confirm-label">Working Days</span>
+                <span className="leave-confirm-value leave-confirm-days">{numberOfDays} day{numberOfDays !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="leave-confirm-row">
+                <span className="leave-confirm-label">Reason</span>
+                <span className="leave-confirm-value">{formData.reason || '—'}</span>
+              </div>
+              {pendingFiles.length > 0 && (
+                <div className="leave-confirm-row">
+                  <span className="leave-confirm-label">Attachments</span>
+                  <span className="leave-confirm-value">{pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="leave-confirm-actions">
+              <button type="button" className="btn btn-primary btn-submit" onClick={confirmSubmit}>
+                Confirm & Submit
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmation(false)} style={{ padding: '12px 28px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: '1px solid #d0d5dd', background: 'white', color: '#374151' }}>
+                Go Back
+              </button>
             </div>
           </div>
-        )}
-      </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,44 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
 // Import pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import DirectorDashboardPage from './pages/DirectorDashboardPage';
+import SupervisorDashboardPage from './pages/SupervisorDashboardPage';
+import HRDashboardPage from './pages/HRDashboardPage';
 import ApprovalQueuePage from './pages/ApprovalQueuePage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminHolidaysPage from './pages/AdminHolidaysPage';
+import AdminLeaveTypesPage from './pages/AdminLeaveTypesPage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 import LeaveApplicationForm from './components/LeaveApplicationForm';
 import LeaveHistoryPage from './pages/LeaveHistoryPage';
 import LeaveCalendarPage from './pages/LeaveCalendarPage';
 import ReportsPage from './pages/ReportsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import ApprovalWorkflowPage from './pages/ApprovalWorkflowPage';
 import NotificationsPage from './pages/NotificationsPage';
-import NotificationCenter from './components/NotificationCenter';
-import ProfileDropdown from './components/ProfileDropdown';
+import SystemActivityPage from './pages/SystemActivityPage';
+import AccountApprovalsPage from './pages/AccountApprovalsPage';
+import SystemHealthPage from './pages/SystemHealthPage';
+import UpcomingHolidaysPage from './pages/UpcomingHolidaysPage';
 import { withAuth } from './components/ProtectedRoute';
-import { hasRole } from './utils/roleHelper';
-
-const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/dashboard', roles: ['employee', 'supervisor', 'hr', 'chief_officer', 'admin'] },
-  { label: 'Apply Leave', path: '/apply-leave', roles: ['employee', 'supervisor'] },
-  { label: 'My Application', path: '/history', roles: ['employee', 'supervisor'] },
-  { label: 'Notifications', path: '/notifications', roles: ['employee', 'supervisor', 'hr', 'chief_officer', 'admin'] },
-  { label: 'Leave Calendar', path: '/leave-calendar', roles: ['employee', 'supervisor'] },
-  { label: 'Approval Queue', path: '/approval-queue', roles: ['supervisor'] },
-  { label: 'Reports', path: '/reports', roles: ['hr', 'chief_officer', 'admin'] },
-  { label: 'Admin', path: '/admin-dashboard', roles: ['admin'] },
-  { label: 'Users', path: '/admin/users', roles: ['hr', 'admin'] }
-];
+import AuthenticatedLayout from './components/AuthenticatedLayout';
+import { normalizeRole } from './utils/roleHelper';
+import Toast from './components/Toast';
 
 function RoleDashboard({ userRole, userId }) {
-  if (userRole === 'admin') {
+  const role = normalizeRole(userRole);
+
+  if (role === 'admin') {
     return <AdminDashboardPage userRole={userRole} userId={userId} />;
   }
 
-  if (userRole === 'supervisor') {
-    return <ApprovalQueuePage userRole={userRole} userId={userId} />;
+  if (role === 'supervisor') {
+    return <SupervisorDashboardPage userRole={userRole} userId={userId} />;
+  }
+
+  if (role === 'director') {
+    return <DirectorDashboardPage userRole={userRole} userId={userId} />;
+  }
+
+  if (role === 'hr') {
+    return <HRDashboardPage userRole={userRole} userId={userId} />;
   }
 
   return <DashboardPage userRole={userRole} userId={userId} />;
@@ -46,17 +56,16 @@ function RoleDashboard({ userRole, userId }) {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'employee');
+  const [userRole, setUserRole] = useState(normalizeRole(localStorage.getItem('userRole') || 'employee'));
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentUser, setCurrentUser] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
-  const location = useLocation();
 
   useEffect(() => {
     // Check if user is logged in
     const token = localStorage.getItem('token');
     if (token) {
       setIsAuthenticated(true);
-      setUserRole(localStorage.getItem('userRole') || 'employee');
+      setUserRole(normalizeRole(localStorage.getItem('userRole') || 'employee'));
       setCurrentUser(JSON.parse(localStorage.getItem('user') || '{}'));
     }
   }, []);
@@ -84,104 +93,61 @@ function App() {
     setCurrentUser({});
   };
 
-  const filteredNavItems = NAV_ITEMS.filter(item => hasRole(userRole, item.roles));
-  const sidebarName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || 'Account User';
-  const sidebarInitials = [currentUser.first_name, currentUser.last_name]
-    .filter(Boolean)
-    .map(name => name.charAt(0).toUpperCase())
-    .join('') || 'U';
+  const routes = (
+    <Routes>
+      {!isAuthenticated ? (
+        <>
+          <Route path="/login" element={<LoginPage setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ForgotPasswordPage />} />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </>
+      ) : (
+        <>
+          <Route path="/dashboard" element={withAuth(RoleDashboard, ['employee', 'supervisor', 'hr', 'director', 'admin'])()} />
+          <Route path="/hr-dashboard" element={withAuth(HRDashboardPage, ['hr'])()} />
+          <Route path="/apply-leave" element={withAuth(LeaveApplicationForm, ['employee', 'supervisor', 'hr', 'director'])()} />
+          <Route path="/history" element={withAuth(LeaveHistoryPage, ['employee', 'supervisor', 'hr', 'director'])()} />
+          <Route path="/notifications" element={withAuth(NotificationsPage, ['employee', 'supervisor', 'hr', 'director', 'admin'])()} />
+          <Route path="/leave-calendar" element={withAuth(LeaveCalendarPage, ['employee', 'supervisor', 'hr', 'director', 'admin'])()} />
+          <Route path="/approval-queue" element={withAuth(ApprovalQueuePage, ['supervisor'])()} />
+          <Route path="/approvals" element={withAuth(ApprovalWorkflowPage, ['supervisor'])()} />
+          <Route path="/admin-dashboard" element={withAuth(AdminDashboardPage, ['admin'])()} />
+          <Route path="/admin/users" element={withAuth(AdminUsersPage, ['hr', 'admin', 'director'])()} />
+          <Route path="/admin/leave-types" element={withAuth(AdminLeaveTypesPage, ['admin'])()} />
+          <Route path="/admin/holidays" element={withAuth(AdminHolidaysPage, ['admin'])()} />
+          <Route path="/admin/settings" element={withAuth(AdminSettingsPage, ['admin'])()} />
+          <Route path="/admin/activity-log" element={withAuth(SystemActivityPage, ['admin'])()} />
+          <Route path="/admin/approvals" element={withAuth(AccountApprovalsPage, ['admin'])()} />
+          <Route path="/admin/system-health" element={withAuth(SystemHealthPage, ['admin'])()} />
+          <Route path="/reports" element={withAuth(ReportsPage, ['hr', 'admin', 'director'])()} />
+          <Route path="/analytics" element={withAuth(AnalyticsPage, ['hr', 'director'])()} />
+          <Route path="/holidays" element={withAuth(UpcomingHolidaysPage, ['employee', 'supervisor', 'hr', 'director', 'admin'])()} />
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </>
+      )}
+    </Routes>
+  );
 
   return (
     <div className={`App ${isAuthenticated ? 'app-authenticated' : ''}`}>
-      {isAuthenticated && (
-        <header className="navbar">
-          <div className="nav-container">
-            <div className="brand-group">
-              <button
-                type="button"
-                className="sidebar-toggle"
-                onClick={() => setIsSidebarOpen(prev => !prev)}
-                aria-label={isSidebarOpen ? 'Hide navigation pages' : 'Show navigation pages'}
-                aria-expanded={isSidebarOpen}
-                aria-controls="system-sidebar"
-              >
-                <span></span>
-                <span></span>
-                <span></span>
-              </button>
-              <h1 className="nav-title">Leave Management System</h1>
-            </div>
-
-            <div className="nav-actions">
-              {hasRole(userRole, ['employee', 'supervisor', 'hr', 'chief_officer', 'admin']) && <NotificationCenter />}
-              <span className="nav-action-divider" aria-hidden="true"></span>
-              <ProfileDropdown onLogout={handleLogout} />
-            </div>
-          </div>
-        </header>
-      )}
-
-      <div className="app-body">
-        {isAuthenticated && (
-          <aside className={`sidebar ${isSidebarOpen ? '' : 'collapsed'}`} id="system-sidebar">
-            <div className="sidebar-user-card">
-              <div className="sidebar-user-avatar">
-                {currentUser.profile_image ? (
-                  <img src={currentUser.profile_image} alt="" />
-                ) : (
-                  <span>{sidebarInitials}</span>
-                )}
-              </div>
-              <div className="sidebar-user-meta">
-                <strong>{sidebarName}</strong>
-                <span>{currentUser.employee_id || userRole.replace(/_/g, ' ')}</span>
-              </div>
-            </div>
-            <nav className="sidebar-nav" aria-label="System pages">
-              {filteredNavItems.map(item => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`sidebar-link ${location.pathname === item.path ? 'active' : ''}`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <button type="button" className="sidebar-link sidebar-action" onClick={handleLogout}>
-                Logout
-              </button>
-            </nav>
-          </aside>
-        )}
-
+      <Toast />
+      {isAuthenticated ? (
+        <AuthenticatedLayout
+          currentUser={currentUser}
+          isSidebarOpen={isSidebarOpen}
+          onLogout={handleLogout}
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+          userRole={userRole}
+        >
+          {routes}
+        </AuthenticatedLayout>
+      ) : (
         <main className="app-main">
-        <div className="container">
-          <Routes>
-            {!isAuthenticated ? (
-              <>
-                <Route path="/login" element={<LoginPage setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="*" element={<Navigate to="/login" />} />
-              </>
-            ) : (
-              <>
-                <Route path="/dashboard" element={withAuth(RoleDashboard, ['employee', 'supervisor', 'hr', 'chief_officer', 'admin'])()} />
-                <Route path="/apply-leave" element={withAuth(LeaveApplicationForm, ['employee', 'supervisor'])()} />
-                <Route path="/history" element={withAuth(LeaveHistoryPage, ['employee', 'supervisor'])()} />
-                <Route path="/notifications" element={withAuth(NotificationsPage, ['employee', 'supervisor', 'hr', 'chief_officer', 'admin'])()} />
-                <Route path="/leave-calendar" element={withAuth(LeaveCalendarPage, ['employee', 'supervisor', 'hr', 'chief_officer', 'admin'])()} />
-                <Route path="/approval-queue" element={withAuth(ApprovalQueuePage, ['supervisor', 'admin'])()} />
-                <Route path="/approvals" element={withAuth(ApprovalWorkflowPage, ['supervisor', 'admin'])()} />
-                <Route path="/admin-dashboard" element={withAuth(AdminDashboardPage, ['admin'])()} />
-                <Route path="/admin/users" element={withAuth(AdminUsersPage, ['hr', 'admin'])()} />
-                <Route path="/reports" element={withAuth(ReportsPage, ['hr', 'chief_officer', 'admin'])()} />
-                <Route path="*" element={<Navigate to="/dashboard" />} />
-              </>
-            )}
-          </Routes>
-        </div>
+          <div className="container">{routes}</div>
         </main>
-      </div>
+      )}
     </div>
   );
 }

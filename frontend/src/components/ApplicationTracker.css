@@ -1,0 +1,124 @@
+/* ===== Application Tracker Pipeline — USIA County Government ===== */
+.app-tracker {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--medium-gray, #e2e8f0);
+}
+
+.app-tracker:last-child { border-bottom: none; }
+
+.app-tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.app-tracker-type { font-size: 13px; font-weight: 700; color: var(--dark-black, #0f172a); }
+.app-tracker-dates { font-size: 11px; font-weight: 600; color: var(--dark-gray, #64748b); }
+
+/* Pipeline layout */
+.app-tracker-pipeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.pipeline-step {
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+/* Connector */
+.pipeline-connector { display: flex; align-items: center; width: 100%; position: relative; justify-content: center; }
+
+.connector-line {
+  position: absolute;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--medium-gray, #e2e8f0);
+  border-radius: 2px;
+  z-index: 0;
+}
+
+.connector-line.connector-complete { background: var(--forest-green); }
+.connector-line.connector-active { background: linear-gradient(90deg, var(--forest-green), var(--county-blue)); }
+.connector-line.connector-rejected { background: var(--danger, #C62828); }
+
+/* Dot */
+.pipeline-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  z-index: 1;
+  transition: all 0.2s ease;
+  border: 2px solid var(--medium-gray, #e2e8f0);
+  background: white;
+  color: var(--dark-gray, #64748b);
+}
+
+/* Step states */
+.pipeline-complete .pipeline-dot {
+  background: var(--forest-green);
+  border-color: var(--forest-green);
+  color: white;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.25);
+}
+
+.pipeline-active .pipeline-dot {
+  background: white;
+  border-color: var(--county-blue);
+  color: var(--county-blue);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.12);
+  animation: trackerPulse 2s ease-in-out infinite;
+}
+
+@keyframes trackerPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.12); }
+  50% { box-shadow: 0 0 0 6px rgba(21, 101, 192, 0.06); }
+}
+
+.pipeline-rejected .pipeline-dot {
+  background: var(--danger, #C62828);
+  border-color: var(--danger, #C62828);
+  color: white;
+  box-shadow: 0 2px 8px rgba(198, 40, 40, 0.25);
+}
+
+.pipeline-waiting .pipeline-dot {
+  background: var(--light-gray, #f8fafc);
+  border-color: var(--medium-gray, #e2e8f0);
+  color: #cbd5e1;
+}
+
+/* Content */
+.pipeline-content { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: 0 4px; }
+.pipeline-label { font-size: 11px; font-weight: 700; color: var(--dark-black, #0f172a); line-height: 1.2; }
+.pipeline-waiting .pipeline-label { color: #94a3b8; }
+.pipeline-complete .pipeline-label { color: var(--forest-green); }
+.pipeline-rejected .pipeline-label { color: var(--danger, #C62828); }
+.pipeline-active .pipeline-label { color: var(--county-blue); }
+.pipeline-timestamp { font-size: 10px; color: var(--dark-gray, #64748b); font-weight: 600; }
+.pipeline-comment { font-size: 10px; color: var(--dark-gray, #64748b); font-style: italic; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .app-tracker-pipeline { flex-direction: column; gap: 0; align-items: flex-start; }
+  .pipeline-step { flex-direction: row; align-items: center; min-width: auto; width: 100%; gap: 10px; }
+  .pipeline-connector { width: auto; flex-direction: column; align-items: center; }
+  .connector-line { position: relative; right: auto; width: 2px; height: 20px; }
+  .pipeline-content { align-items: flex-start; text-align: left; }
+}

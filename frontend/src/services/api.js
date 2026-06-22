@@ -27,7 +27,11 @@ export const authService = {
   login: (data) => api.post('/auth/login', data),
   getCurrentUser: () => api.get('/auth/me'),
   updateCurrentUser: (data) => api.put('/auth/me', data),
-  changePassword: (data) => api.put('/auth/me/password', data)
+  changePassword: (data) => api.put('/auth/me/password', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  getDepartments: () => api.get('/auth/departments'),
+  getDirectorates: (params) => api.get('/auth/directorates', { params })
 };
 
 export const leaveService = {
@@ -42,7 +46,9 @@ export const leaveService = {
   getLeaveBalance: () => api.get('/leave/balance'),
   getCarryoverData: () => api.get('/leave/balance/carryover'),
   getAnalyticsTrends: (year) => api.get('/leave/analytics/trends', { params: { year } }),
-  getTeamStats: (year) => api.get('/leave/analytics/team-stats', { params: { year } })
+  getTeamStats: (year) => api.get('/leave/analytics/team-stats', { params: { year } }),
+  approveApplication: (id, data) => api.put(`/approval/applications/${id}/approve`, data),
+  getHolidays: () => api.get('/leave/holidays')
 };
 
 export const reportService = {
@@ -53,7 +59,9 @@ export const reportService = {
   getMyApprovals: (params) => api.get('/approval/mine', { params }),
   getDelegates: () => api.get('/approval/delegates'),
   getMonthlyTrends: (params) => api.get('/reports/monthly-trends', { params }),
-  getSummaryReport: (params) => api.get('/reports/summary', { params })
+  getSummaryReport: (params) => api.get('/reports/summary', { params }),
+  getDirectorEmployees: () => api.get('/reports/director/employees'),
+  getDirectorDashboard: (params) => api.get('/reports/director/dashboard', { params })
 };
 
 export const attachmentService = {
@@ -82,8 +90,16 @@ export const notificationService = {
 // Leave types admin
 adminService.getLeaveTypes = () => api.get('/admin/leave-types');
 adminService.addLeaveType = (data) => api.post('/admin/leave-types', data);
+adminService.updateLeaveType = (id, data) => api.put(`/admin/leave-types/${id}`, data);
 adminService.deleteLeaveType = (id) => api.delete(`/admin/leave-types/${id}`);
 adminService.getSettings = () => api.get('/admin/settings');
 adminService.updateSetting = (key, data) => api.put(`/admin/settings/${key}`, data);
+adminService.runCarryForward = (data) => api.post('/admin/carry-forward/run', data);
+adminService.getCarryForwardLog = () => api.get('/admin/carry-forward/log');
+adminService.getActivityLog = (params) => api.get('/admin/activity-log', { params });
+adminService.clearActivityLog = () => api.delete('/admin/activity-log');
+adminService.getDepartments = () => api.get('/admin/departments');
+adminService.getDirectorates = (params) => api.get('/admin/directorates', { params });
+adminService.getSupervisors = (params) => api.get('/admin/supervisors', { params });
 
 export default api;

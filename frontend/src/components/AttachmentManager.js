@@ -111,6 +111,11 @@ function AttachmentManager({ applicationId, isReadOnly = false }) {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
+  // In read-only mode, hide the entire section if there are no attachments
+  if (isReadOnly && !loading && attachments.length === 0) {
+    return null;
+  }
+
   return (
     <div className="attachment-manager">
       <h3>Supporting Documents</h3>

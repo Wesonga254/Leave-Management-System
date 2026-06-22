@@ -3,18 +3,35 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { initializeDatabase } = require('./database');
+const { startCarryForwardScheduler } = require('./services/carryForwardService');
+const { auditMiddleware } = require('./utils/auditLogger');
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(auditMiddleware);
 
 // Initialize database
-let db;
-
 initializeDatabase().then(() => {
   console.log('Database initialized successfully');
+  startCarryForwardScheduler();
+
+  // Verify SMTP connection on startup
+  const nodemailer = require('nodemailer');
+  if (process.env.SMTP_USER && process.env.SMTP_PASSWORD &&
+      process.env.SMTP_USER !== 'your_email@gmail.com' && process.env.SMTP_PASSWORD !== 'your_password') {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
+    });
+    transporter.verify()
+      .then(() => console.log('✓ SMTP email service connected successfully (' + process.env.SMTP_USER + ')'))
+      .catch(err => console.error('✗ SMTP connection FAILED:', err.message));
+  } else {
+    console.warn('⚠ SMTP not configured — emails will NOT be sent');
+  }
 }).catch(err => {
   console.error('Database initialization error:', err);
   process.exit(1);

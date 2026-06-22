@@ -5,7 +5,7 @@ const ROLE_RANK = {
   employee: 1,
   supervisor: 2,
   hr: 3,
-  chief_officer: 4,
+  director: 4,
   admin: 5
 };
 
@@ -42,6 +42,22 @@ const authorizeRole = (...roles) => {
   };
 };
 
+const authorizeExactRole = (...roles) => {
+  const allowedRoles = roles.map(role => String(role || '').trim().toLowerCase());
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    const userRole = String(req.user.role || '').trim().toLowerCase();
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ message: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+
+const authorizeDashboardRole = (...roles) => authorizeExactRole(...roles);
+
 // Authorize that the current user is the approver for a given applicationId
 const authorizeApprover = () => {
   return async (req, res, next) => {
@@ -74,5 +90,7 @@ const authorizeApprover = () => {
 module.exports = {
   authenticateToken,
   authorizeRole,
+  authorizeExactRole,
+  authorizeDashboardRole,
   authorizeApprover
 };

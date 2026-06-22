@@ -4,92 +4,14 @@
   margin: 0 auto;
 }
 
-.card {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(46, 159, 216, 0.1);
-  margin-bottom: 24px;
-  padding: 28px;
-  transition: box-shadow 0.3s ease;
-  border-left: 6px solid var(--primary-blue);
-  border-top: 3px solid var(--light-green);
-}
-
-.card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.card-header {
-  border-bottom: 2px solid var(--medium-gray);
-  padding-bottom: 16px;
-  margin-bottom: 20px;
-}
-
-.card-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--dark-black);
-  margin: 0;
-}
-
-/* Statistics Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px;
-  background: linear-gradient(135deg, #f5f5f5 0%, #f0f0f0 100%);
-  border-radius: 10px;
-  border-left: 5px solid var(--primary-blue);
-  border-top: 3px solid var(--light-green);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(46, 159, 216, 0.15);
-}
-
-.stat-card-approved {
-  border-left-color: var(--light-green);
-  border-top-color: var(--light-green);
-}
-
-.stat-card-pending {
-  border-left-color: #FFA500;
-  border-top-color: #FFA500;
-}
-
-.stat-card-rejected {
-  border-left-color: var(--danger);
-  border-top-color: var(--danger);
-}
+/* Statistics Grid overrides for leave history */
+.leave-history-container .stat-card-approved::before { background: linear-gradient(180deg, var(--lime-green) 0%, var(--forest-green) 100%); }
+.leave-history-container .stat-card-pending::before { background: linear-gradient(180deg, #FFA500 0%, #E65100 100%); }
+.leave-history-container .stat-card-rejected::before { background: linear-gradient(180deg, var(--danger) 0%, #B71C1C 100%); }
 
 .stat-icon {
-  font-size: 32px;
-  line-height: 1;
-}
-
-.stat-content h3 {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dark-gray);
-  text-transform: uppercase;
-  margin: 0 0 6px 0;
-  letter-spacing: 0.5px;
-}
-
-.stat-content .number {
   font-size: 28px;
-  font-weight: 700;
-  color: var(--dark-black);
+  line-height: 1;
 }
 
 /* Trend Section */
@@ -119,8 +41,9 @@
   flex-wrap: wrap;
   align-items: flex-end;
   padding: 20px;
-  background: linear-gradient(135deg, #f5f5f5 0%, #f0f0f0 100%);
-  border-radius: 10px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .filter-group {
@@ -153,7 +76,7 @@
 .filter-select:focus {
   outline: none;
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(46, 159, 216, 0.15);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.1);
 }
 
 .btn-export {
@@ -165,49 +88,19 @@
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 12px rgba(46, 159, 216, 0.3);
+  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.25);
 }
 
 .btn-export:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(46, 159, 216, 0.4);
+  box-shadow: 0 4px 14px rgba(21, 101, 192, 0.35);
 }
 
 /* Table Styles */
 .table-wrapper {
   overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0;
-}
-
-.table thead {
-  background: linear-gradient(135deg, var(--dark-black) 0%, #333333 100%);
-  border-bottom: 2px solid var(--medium-gray);
-}
-
-.table th {
-  padding: 14px;
-  text-align: left;
-  font-weight: 600;
-  color: white;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.table td {
-  padding: 14px;
-  border-bottom: 1px solid var(--light-gray);
-  font-size: 14px;
-  color: var(--dark-gray);
-}
-
-.table tbody tr:hover {
-  background-color: var(--light-gray);
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .table tbody tr.status-rejected {

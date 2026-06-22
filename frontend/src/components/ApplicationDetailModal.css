@@ -1,0 +1,361 @@
+/* ───────────────────────────────────────────────
+   Application Detail Modal — Read-Only View
+   ─────────────────────────────────────────────── */
+
+.adm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: adm-fadeIn 0.2s ease;
+}
+
+@keyframes adm-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes adm-slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.adm-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  max-width: 680px;
+  width: 92%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  animation: adm-slideUp 0.25s ease;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.adm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.adm-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adm-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.adm-badge-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.adm-close {
+  background: none;
+  border: 1px solid #e2e8f0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.adm-close:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* ── Body ── */
+.adm-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.adm-loading {
+  text-align: center;
+  padding: 48px 24px;
+  color: #64748b;
+  font-size: 15px;
+}
+
+.adm-loading .adm-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #1B7340;
+  border-radius: 50%;
+  animation: adm-spin 0.7s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes adm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.adm-error {
+  text-align: center;
+  padding: 32px 24px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+/* ── Status Badge ── */
+.adm-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+
+.adm-status.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.adm-status.approved {
+  background: #d1fae5;
+  color: #145A32;
+}
+
+.adm-status.rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.adm-status.cancelled {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* ── Detail Grid ── */
+.adm-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.adm-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adm-detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.adm-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.adm-detail-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.adm-detail-value.reason-text {
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Section Divider ── */
+.adm-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.adm-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+/* ── Workflow Timeline ── */
+.adm-workflow-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 4px;
+}
+
+.adm-workflow-step {
+  display: flex;
+  gap: 16px;
+  position: relative;
+  padding-bottom: 20px;
+}
+
+.adm-workflow-step:last-child {
+  padding-bottom: 0;
+}
+
+.adm-workflow-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.adm-workflow-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.adm-workflow-dot.pending {
+  background: #f59e0b;
+}
+
+.adm-workflow-dot.approved {
+  background: #1B7340;
+}
+
+.adm-workflow-dot.rejected {
+  background: #dc2626;
+}
+
+.adm-workflow-dot.not_required {
+  background: #94a3b8;
+}
+
+.adm-workflow-info {
+  flex: 1;
+}
+
+.adm-workflow-info strong {
+  display: block;
+  font-size: 14px;
+  color: #0f172a;
+  text-transform: capitalize;
+  margin-bottom: 2px;
+}
+
+.adm-workflow-info span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.adm-workflow-info .adm-workflow-comments {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #475569;
+  font-style: italic;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #cbd5e1;
+}
+
+.adm-workflow-empty {
+  color: #94a3b8;
+  font-size: 14px;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* ── Attachments Section ── */
+.adm-attachments-section {
+  margin-top: 4px;
+}
+
+/* ── Footer ── */
+.adm-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: #fafbfc;
+}
+
+.adm-footer .btn {
+  min-width: 100px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .adm-modal {
+    width: 98%;
+    max-height: 94vh;
+    border-radius: 12px;
+  }
+
+  .adm-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .adm-header {
+    padding: 16px 18px;
+  }
+
+  .adm-body {
+    padding: 18px;
+  }
+}

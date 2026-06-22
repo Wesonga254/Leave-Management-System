@@ -43,8 +43,8 @@ router.post('/apply', authenticateToken, [
 
     const leaveApplicationId = result.lastID;
 
-    // Create approval workflow entries for supervisor, HR, and chief officer
-    const approvalLevels = ['supervisor', 'hr', 'chief_officer'];
+    // Create approval workflow entry for supervisor
+    const approvalLevels = ['supervisor'];
     for (const level of approvalLevels) {
       let approverId = null;
 
@@ -52,14 +52,6 @@ router.post('/apply', authenticateToken, [
         // Get user's reporting officer
         const user = await db.get('SELECT reporting_officer_id FROM users WHERE id = ?', [userId]);
         approverId = user.reporting_officer_id;
-      } else if (level === 'hr') {
-        // Get any HR user
-        const hr = await db.get('SELECT id FROM users WHERE role = ?', ['hr']);
-        approverId = hr ? hr.id : null;
-      } else if (level === 'chief_officer') {
-        // Get chief officer
-        const co = await db.get('SELECT id FROM users WHERE role = ?', ['chief_officer']);
-        approverId = co ? co.id : null;
       }
 
       if (approverId) {

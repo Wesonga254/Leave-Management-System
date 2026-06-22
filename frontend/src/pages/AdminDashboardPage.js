@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { reportService } from '../services/api';
+import { adminService, reportService } from '../services/api';
 import '../pages/DashboardPage.css';
 
 function AdminDashboardPage({ userRole, userId }) {
@@ -15,6 +15,8 @@ function AdminDashboardPage({ userRole, userId }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [carryForwardRunning, setCarryForwardRunning] = useState(false);
+  const [carryForwardMessage, setCarryForwardMessage] = useState('');
 
   // Verify admin access
   useEffect(() => {
@@ -51,6 +53,25 @@ function AdminDashboardPage({ userRole, userId }) {
     }
   };
 
+  const handleRunCarryForward = async () => {
+    const fromYear = new Date().getFullYear() - 1;
+    if (!window.confirm(`Run leave carry-forward from ${fromYear} to ${fromYear + 1}? This will update opening balances and record audit transactions.`)) {
+      return;
+    }
+
+    try {
+      setCarryForwardRunning(true);
+      setCarryForwardMessage('');
+      const response = await adminService.runCarryForward({ from_year: fromYear });
+      const data = response.data.data || {};
+      setCarryForwardMessage(`Carry-forward complete: ${data.processed || 0} balances processed, ${data.carriedForward || 0} days carried, ${data.forfeited || 0} days forfeited.`);
+    } catch (err) {
+      setCarryForwardMessage(err?.response?.data?.message || 'Unable to run carry-forward');
+    } finally {
+      setCarryForwardRunning(false);
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading admin dashboard...</div>;
   }
@@ -70,6 +91,7 @@ function AdminDashboardPage({ userRole, userId }) {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {carryForwardMessage && <div className="alert alert-info">{carryForwardMessage}</div>}
 
       {/* Quick Stats */}
       <div className="stats-grid admin-stats-grid">
@@ -124,14 +146,23 @@ function AdminDashboardPage({ userRole, userId }) {
 
           <div className="control-card">
             <h3>Leave Management</h3>
-            <p>Track requests across approved, pending, and rejected statuses.</p>
-            <button type="button" onClick={() => navigate('/leave-calendar')}>Leave Calendar</button>
+            <p>Configure leave categories, public holidays, and accrual rules.</p>
+            <div className="actions-buttons">
+              <button type="button" onClick={() => navigate('/admin/leave-types')}>Leave Types</button>
+              <button type="button" onClick={() => navigate('/admin/holidays')}>Holidays</button>
+              <button type="button" onClick={handleRunCarryForward} disabled={carryForwardRunning}>
+                {carryForwardRunning ? 'Running...' : 'Run Carry Forward'}
+              </button>
+            </div>
           </div>
 
           <div className="control-card">
             <h3>Reports & Analytics</h3>
             <p>Review utilization, approvals, and leave trends.</p>
-            <button type="button" onClick={() => navigate('/reports')}>View Reports</button>
+            <div className="actions-buttons">
+              <button type="button" onClick={() => navigate('/reports')}>View Reports</button>
+              <button type="button" onClick={() => navigate('/admin/settings')}>System Config</button>
+            </div>
           </div>
         </div>
       </div>

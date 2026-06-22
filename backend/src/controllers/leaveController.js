@@ -1,9 +1,64 @@
 const { getDatabase } = require('../database');
-const { notifyUser } = require('../utils/notifications');
+const { notifyUser, sendLeaveApprovalEmail, sendLeaveRejectionEmail, sendLeaveSubmissionEmail } = require('../utils/notifications');
+const { isLeaveTypeApplicableToGender } = require('../utils/leaveTypeGender');
 
 const formatDate = (value) => {
   if (!value) return '';
-  return new Date(value).toISOString().slice(0, 10);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const calculateBusinessDays = async (db, startDate, endDate) => {
+  const holidayRows = await db.all(
+    `SELECT date FROM public_holidays WHERE date BETWEEN ? AND ?`,
+    [formatDate(startDate), formatDate(endDate)]
+  );
+  const holidaySet = new Set((holidayRows || []).map(h => formatDate(h.date)));
+
+  let count = 0;
+  let d = new Date(`${formatDate(startDate)}T00:00:00`);
+  const ed = new Date(`${formatDate(endDate)}T00:00:00`);
+  while (d <= ed) {
+    const day = d.getDay();
+    const iso = formatDate(d);
+    if (day !== 0 && day !== 6 && !holidaySet.has(iso)) {
+      count += 1;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+};
+
+const OVERLAP_MESSAGE = 'You already have an active or pending leave application of the same type for overlapping dates. Please choose different dates or a different leave type.';
+
+const getOverlappingLeaveApplication = async (db, userId, leaveTypeId, startDate, endDate, excludeApplicationId = null) => {
+  const params = [userId, leaveTypeId, endDate, startDate];
+  let excludeClause = '';
+  if (excludeApplicationId) {
+    excludeClause = 'AND id != ?';
+    params.push(excludeApplicationId);
+  }
+
+  return db.get(
+    `SELECT id, status, start_date, end_date
+     FROM leave_applications
+     WHERE user_id = ?
+       AND leave_type_id = ?
+       AND status IN ('pending', 'approved')
+       AND date(start_date) <= date(?) AND date(end_date) >= date(?)
+       ${excludeClause}
+     LIMIT 1`,
+    params
+  );
+};
+
+const getCurrentUserGender = async (db, userId, fallbackGender) => {
+  const user = await db.get('SELECT gender FROM users WHERE id = ?', [userId]);
+  return user?.gender || fallbackGender;
 };
 
 const countCalendarDays = (start, end) => {
@@ -43,8 +98,8 @@ const addWorkflowToApplications = async (db, applications) => {
 
 // Submit Leave Application
 const submitLeaveApplication = async (req, res) => {
+  const db = getDatabase();
   try {
-    const db = getDatabase();
     const {
       leave_type_id,
       start_date,
@@ -58,6 +113,8 @@ const submitLeaveApplication = async (req, res) => {
     if (!leave_type_id || !start_date || !end_date) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
+
+    await db.run('BEGIN TRANSACTION');
 
     // Update user designation if provided
     if (designation) {
@@ -76,52 +133,51 @@ const submitLeaveApplication = async (req, res) => {
     }
 
     // Calculate number of business days (exclude weekends and public holidays)
-
-    const toISO = d => new Date(d).toISOString().slice(0,10);
-
-    function countBusinessDays(start, end, holidaysSet) {
-      let count = 0;
-      let d = new Date(start);
-      const ed = new Date(end);
-      while (d <= ed) {
-        const day = d.getDay();
-        const iso = toISO(d);
-        if (day !== 0 && day !== 6 && !holidaysSet.has(iso)) {
-          count += 1;
-        }
-        d.setDate(d.getDate() + 1);
-      }
-      return count;
+    const numberOfDays = await calculateBusinessDays(db, start_date, end_date);
+    if (numberOfDays < 1) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ message: 'Requested leave dates contain no working days' });
     }
 
-    // build set of public holidays within range
-    const holidayRows = await db.all(
-      `SELECT date FROM public_holidays WHERE date BETWEEN ? AND ?`,
-      [start_date, end_date]
-    );
-    const holidaySet = new Set((holidayRows || []).map(h => h.date));
+    const employeeGender = await getCurrentUserGender(db, req.user.id, req.user.gender);
+    const leaveType = await db.get('SELECT name, applicable_gender FROM leave_types WHERE id = ?', [leave_type_id]);
+    if (!leaveType) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ message: 'Invalid leave type' });
+    }
 
-    const numberOfDays = countBusinessDays(start_date, end_date, holidaySet);
+    if (!isLeaveTypeApplicableToGender(leaveType, employeeGender)) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ message: 'This leave type is not applicable to your gender' });
+    }
 
     // Check leave balance
-    const currentYear = new Date().getFullYear();
+    const currentYear = new Date(start_date).getFullYear();
     const leaveBalance = await db.get(
       `SELECT * FROM leave_balance WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
       [req.user.id, leave_type_id, currentYear]
     );
 
     // Enforce attachment rules for certain leave types
-    const leaveType = await db.get('SELECT name FROM leave_types WHERE id = ?', [leave_type_id]);
     const leaveName = (leaveType?.name || '').toLowerCase();
     if ((leaveName.includes('sick') && numberOfDays >= 3) || leaveName.includes('compassion')) {
-      // require an attachment flag or file upload (front-end should upload via attachments endpoint)
       if (!req.body.has_attachment && !req.body.hasAttachment) {
+        await db.run('ROLLBACK');
         return res.status(400).json({ message: 'Supporting attachment required for this leave type. Please upload before submitting.' });
       }
     }
 
     if (!leaveBalance || leaveBalance.remaining_days < numberOfDays) {
-      return res.status(400).json({ message: 'Insufficient leave balance' });
+      await db.run('ROLLBACK');
+      return res.status(400).json({
+        message: `You do not have enough leave days. Available balance: ${leaveBalance?.remaining_days || 0} days, Requested: ${numberOfDays} days.`
+      });
+    }
+
+    const overlappingApplication = await getOverlappingLeaveApplication(db, req.user.id, leave_type_id, start_date, end_date);
+    if (overlappingApplication) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ message: OVERLAP_MESSAGE });
     }
 
     // Insert leave application
@@ -132,14 +188,38 @@ const submitLeaveApplication = async (req, res) => {
     );
 
     // Create approval workflow records
-    const user = await db.get('SELECT reporting_officer_id FROM users WHERE id = ?', [req.user.id]);
+    const user = await db.get('SELECT reporting_officer_id, department FROM users WHERE id = ?', [req.user.id]);
+
+    let supervisorId = user?.reporting_officer_id;
+    if (!supervisorId && user?.department) {
+      // First try to find a supervisor in the same directorate
+      const applicant = await db.get('SELECT directorate_id FROM users WHERE id = ?', [req.user.id]);
+      let deptSupervisor = null;
+      if (applicant?.directorate_id) {
+        deptSupervisor = await db.get(
+          `SELECT id FROM users WHERE role = 'supervisor' AND directorate_id = ? LIMIT 1`,
+          [applicant.directorate_id]
+        );
+      }
+      // Fall back to same department if no directorate match
+      if (!deptSupervisor) {
+        deptSupervisor = await db.get(
+          `SELECT id FROM users WHERE role = 'supervisor' AND LOWER(department) = LOWER(?) LIMIT 1`,
+          [user.department]
+        );
+      }
+      if (deptSupervisor) {
+        supervisorId = deptSupervisor.id;
+        await db.run('UPDATE users SET reporting_officer_id = ? WHERE id = ?', [supervisorId, req.user.id]);
+      }
+    }
 
     // Supervisor approval (only approval step required)
-    if (user.reporting_officer_id) {
+    if (supervisorId) {
       await db.run(
         `INSERT INTO approval_workflow (leave_application_id, approver_id, approval_level, status)
          VALUES (?, ?, ?, ?)`,
-        [result.lastID, user.reporting_officer_id, 'supervisor', 'pending']
+        [result.lastID, supervisorId, 'supervisor', 'pending']
       );
     } else {
       await db.run(
@@ -154,19 +234,37 @@ const submitLeaveApplication = async (req, res) => {
       );
     }
 
-    // Notify the first responsible approver immediately.
+    await db.run('COMMIT');
+
+    // Notify all stakeholders immediately.
     try {
+      // req.user from JWT only has { id, role } — fetch full user data from DB
+      const fullUser = await db.get('SELECT id, email, phone, first_name, last_name, username, department, department_id FROM users WHERE id = ?', [req.user.id]);
+      const applicantName = fullUser.first_name || fullUser.username;
+
+      // 1. Notify the employee (applicant) — in-app
       await notifyUser({
-        userId: req.user.id,
-        email: req.user.email,
-        phone: req.user.phone,
+        userId: fullUser.id,
+        email: fullUser.email,
+        phone: fullUser.phone,
         type: 'leave_submission',
         title: 'Leave Request Submitted',
         message: `Your ${leaveType.name} request from ${start_date} to ${end_date} has been submitted for approval.`,
         referenceId: result.lastID
       });
 
-      if (user.reporting_officer_id) {
+      // 1b. Send polished HTML submission email to applicant
+      sendLeaveSubmissionEmail({
+        to: fullUser.email,
+        firstName: applicantName,
+        leaveType: leaveType.name,
+        startDate: start_date,
+        endDate: end_date,
+        numberOfDays
+      }).catch(err => console.error('Submission email error:', err.message));
+
+      if (supervisorId) {
+        // 2. Notify the supervisor (CAN ACT)
         const firstApprover = await db.get(
           `SELECT aw.approver_id, approver.email, approver.phone, approver.first_name
            FROM approval_workflow aw
@@ -184,11 +282,72 @@ const submitLeaveApplication = async (req, res) => {
             phone: firstApprover.phone,
             type: 'leave_submission',
             title: 'Leave awaiting your approval',
-            message: `${req.user.first_name || req.user.username} submitted a leave request (${leaveType.name}) from ${start_date} to ${end_date}.`,
+            message: `${applicantName} submitted a leave request (${leaveType.name}) from ${start_date} to ${end_date}. Please review and approve or reject.`,
+            referenceId: result.lastID
+          });
+        }
+
+        // 3. Notify all HR users (VIEW ONLY — informational)
+        const hrUsers = await db.all(`SELECT id, email, phone FROM users WHERE role = 'hr'`);
+        for (const hr of hrUsers) {
+          await notifyUser({
+            userId: hr.id,
+            email: hr.email,
+            phone: hr.phone,
+            type: 'leave_submission_info',
+            title: 'New Leave Application Submitted',
+            message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+            referenceId: result.lastID
+          });
+        }
+
+        // 4. Notify the department director (VIEW ONLY — informational)
+        if (fullUser.department_id) {
+          const dept = await db.get('SELECT director_id FROM departments WHERE id = ?', [fullUser.department_id]);
+          if (dept?.director_id) {
+            const director = await db.get('SELECT id, email, phone FROM users WHERE id = ?', [dept.director_id]);
+            if (director) {
+              await notifyUser({
+                userId: director.id,
+                email: director.email,
+                phone: director.phone,
+                type: 'leave_submission_info',
+                title: 'New Leave Application Submitted',
+                message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+                referenceId: result.lastID
+              });
+            }
+          }
+        }
+        // Fallback: if no department director, notify all users with role 'director'
+        if (!fullUser.department_id || !(await db.get('SELECT director_id FROM departments WHERE id = ?', [fullUser.department_id]))?.director_id) {
+          const directors = await db.all(`SELECT id, email, phone FROM users WHERE role = 'director'`);
+          for (const dir of directors) {
+            await notifyUser({
+              userId: dir.id,
+              email: dir.email,
+              phone: dir.phone,
+              type: 'leave_submission_info',
+              title: 'New Leave Application Submitted',
+              message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+              referenceId: result.lastID
+            });
+          }
+        }
+
+        // 5. Notify admin users (informational)
+        const adminUsers = await db.all(`SELECT id, email, phone FROM users WHERE role = 'admin'`);
+        for (const admin of adminUsers) {
+          await notifyUser({
+            userId: admin.id,
+            type: 'leave_submission_info',
+            title: 'New Leave Application',
+            message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date} (${numberOfDays} day(s)).`,
             referenceId: result.lastID
           });
         }
       } else {
+        // No supervisor — auto-approved, notify HR
         const hrUsers = await db.all(`SELECT id, email, phone FROM users WHERE role = 'hr'`);
         for (const hr of hrUsers) {
           await notifyUser({
@@ -197,7 +356,7 @@ const submitLeaveApplication = async (req, res) => {
             phone: hr.phone,
             type: 'leave_hr_notice',
             title: 'Leave Auto-Approved (No Supervisor)',
-            message: `${req.user.first_name || req.user.username} submitted a ${leaveType.name} request (${start_date} to ${end_date}) with no assigned supervisor. The request was auto-approved. No HR action is required.`,
+            message: `${applicantName} submitted a ${leaveType.name} request (${start_date} to ${end_date}) with no assigned supervisor. The request was auto-approved. No HR action is required.`,
             referenceId: result.lastID
           });
         }
@@ -212,6 +371,7 @@ const submitLeaveApplication = async (req, res) => {
       application_id: result.lastID
     });
   } catch (error) {
+    await db.run('ROLLBACK').catch(() => {});
     res.status(500).json({
       success: false,
       message: 'Error submitting leave application',
@@ -224,7 +384,7 @@ const submitLeaveApplication = async (req, res) => {
 const getLeaveApplications = async (req, res) => {
   try {
     const db = getDatabase();
-    const { status, user_id } = req.query;
+    const { status, user_id, scope } = req.query;
 
     let query = `
       SELECT 
@@ -233,6 +393,7 @@ const getLeaveApplications = async (req, res) => {
         u.first_name,
         u.last_name,
         u.employee_id,
+        u.department,
         la.leave_type_id,
         lt.name as leave_type,
         lt.name as leave_type_name,
@@ -255,13 +416,32 @@ const getLeaveApplications = async (req, res) => {
       params.push(status);
     }
 
-    const canViewOthers = ['admin', 'hr', 'chief_officer'].includes(req.user.role);
-    if (user_id && canViewOthers) {
-      query += ' AND la.user_id = ?';
-      params.push(user_id);
-    } else if (!canViewOthers) {
+    // scope=own forces filtering to the logged-in user only,
+    // regardless of role. Used by "My Requests" page.
+    if (scope === 'own') {
       query += ' AND la.user_id = ?';
       params.push(req.user.id);
+    } else {
+      const canViewOthers = ['admin', 'hr', 'director'].includes(req.user.role);
+      if (user_id && canViewOthers) {
+        query += ' AND la.user_id = ?';
+        params.push(user_id);
+      } else if (!canViewOthers) {
+        query += ' AND la.user_id = ?';
+        params.push(req.user.id);
+      }
+    }
+
+    // Directors can only see applications from their department
+    if (req.user.role === 'director') {
+      const directorDept = await db.get(
+        `SELECT d.id FROM departments d WHERE d.director_id = ? LIMIT 1`,
+        [req.user.id]
+      );
+      if (directorDept) {
+        query += ' AND u.department_id = ?';
+        params.push(directorDept.id);
+      }
     }
 
     query += ' ORDER BY la.created_at DESC';
@@ -284,8 +464,8 @@ const getLeaveApplications = async (req, res) => {
 
 // Approve/Reject Leave Application
 const updateLeaveApplicationStatus = async (req, res) => {
+  const db = getDatabase();
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { approval_level, status, comments } = req.body;
 
@@ -325,6 +505,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'An earlier approval step must be completed first' });
     }
 
+    await db.run('BEGIN TRANSACTION');
+
     // Update approval workflow
     await db.run(
       `UPDATE approval_workflow
@@ -343,6 +525,7 @@ const updateLeaveApplicationStatus = async (req, res) => {
     );
 
     let applicationStatus = 'pending';
+    let leaveApp = null;
 
     if (status === 'rejected') {
       applicationStatus = 'rejected';
@@ -358,10 +541,56 @@ const updateLeaveApplicationStatus = async (req, res) => {
         `UPDATE leave_applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [applicationStatus, id]
       );
+    } else {
+      const nextApprover = await db.get(
+        `SELECT aw.*, approver.email, approver.phone, approver.first_name
+         FROM approval_workflow aw
+         JOIN users approver ON aw.approver_id = approver.id
+         WHERE aw.leave_application_id = ? AND aw.status = 'pending'
+         ORDER BY aw.id ASC
+         LIMIT 1`,
+        [id]
+      );
 
+      if (!nextApprover) {
+        applicationStatus = 'approved';
+
+        leaveApp = await db.get(
+          `SELECT la.user_id, la.leave_type_id, la.number_of_days, la.start_date, la.end_date,
+            lt.name as leave_type,
+            u.email as applicant_email, u.phone as applicant_phone,
+            u.first_name as applicant_first, u.last_name as applicant_last, u.employee_id
+           FROM leave_applications la
+           JOIN leave_types lt ON la.leave_type_id = lt.id
+           JOIN users u ON la.user_id = u.id
+           WHERE la.id = ?`,
+          [id]
+        );
+
+        if (leaveApp) {
+          const currentYear = new Date(leaveApp.start_date).getFullYear();
+          await db.run(
+            `UPDATE leave_balance
+             SET used_days = used_days + ?, remaining_days = remaining_days - ?, updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
+            [leaveApp.number_of_days, leaveApp.number_of_days, leaveApp.user_id, leaveApp.leave_type_id, currentYear]
+          );
+
+          await db.run(
+            `UPDATE leave_applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [applicationStatus, id]
+          );
+        }
+      }
+    }
+
+    await db.run('COMMIT');
+
+    // Send emails / notifications outside transaction
+    if (status === 'rejected') {
       try {
         const applicant = await db.get(
-          `SELECT u.id, u.email, u.phone, u.first_name, lt.name as leave_type, la.start_date, la.end_date
+          `SELECT u.id, u.email, u.phone, u.first_name, lt.name as leave_type, la.start_date, la.end_date, la.number_of_days
            FROM leave_applications la
            JOIN users u ON la.user_id = u.id
            JOIN leave_types lt ON la.leave_type_id = lt.id
@@ -378,6 +607,17 @@ const updateLeaveApplicationStatus = async (req, res) => {
             message: `Your leave request (${applicant.leave_type}) from ${applicant.start_date} to ${applicant.end_date} has been rejected. Reason: ${comments || 'No reason provided'}`,
             referenceId: id
           });
+
+          // Send rejection email
+          sendLeaveRejectionEmail({
+            to: applicant.email,
+            firstName: applicant.first_name,
+            leaveType: applicant.leave_type,
+            startDate: applicant.start_date,
+            endDate: applicant.end_date,
+            numberOfDays: applicant.number_of_days,
+            comments: comments
+          }).catch(err => console.error('Rejection email error:', err.message));
         }
       } catch (err) {
         console.error('Notification error:', err.message);
@@ -407,7 +647,7 @@ const updateLeaveApplicationStatus = async (req, res) => {
             });
           }
 
-          const leaveApp = await db.get(
+          const leaveAppDetail = await db.get(
             `SELECT la.*, u.first_name as applicant_first, lt.name as leave_type
              FROM leave_applications la
              JOIN users u ON la.user_id = u.id
@@ -415,14 +655,14 @@ const updateLeaveApplicationStatus = async (req, res) => {
              WHERE la.id = ?`,
             [id]
           );
-          if (leaveApp) {
+          if (leaveAppDetail) {
             await notifyUser({
               userId: nextApprover.approver_id,
               email: nextApprover.email,
               phone: nextApprover.phone,
               type: 'approval_request',
               title: 'Leave awaiting your approval',
-              message: `${leaveApp.applicant_first} has a ${leaveApp.leave_type} request awaiting your approval from ${leaveApp.start_date} to ${leaveApp.end_date}.`,
+              message: `${leaveAppDetail.applicant_first} has a ${leaveAppDetail.leave_type} request awaiting your approval from ${leaveAppDetail.start_date} to ${leaveAppDetail.end_date}.`,
               referenceId: id
             });
           }
@@ -430,33 +670,10 @@ const updateLeaveApplicationStatus = async (req, res) => {
           console.error('Notification error:', err.message);
         }
       } else {
-        applicationStatus = 'approved';
-
-        const leaveApp = await db.get(
-          `SELECT la.user_id, la.leave_type_id, la.number_of_days, la.start_date, la.end_date,
-            lt.name as leave_type,
-            u.email as applicant_email, u.phone as applicant_phone,
-            u.first_name as applicant_first, u.last_name as applicant_last, u.employee_id
-           FROM leave_applications la
-           JOIN leave_types lt ON la.leave_type_id = lt.id
-           JOIN users u ON la.user_id = u.id
-           WHERE la.id = ?`,
-          [id]
-        );
-
+        // Fully approved
         if (leaveApp) {
-          const currentYear = new Date().getFullYear();
-          await db.run(
-            `UPDATE leave_balance
-             SET used_days = used_days + ?, remaining_days = remaining_days - ?, updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
-            [leaveApp.number_of_days, leaveApp.number_of_days, leaveApp.user_id, leaveApp.leave_type_id, currentYear]
-          );
-
-          await db.run(
-            `UPDATE leave_applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [applicationStatus, id]
-          );
+          sendFinalApprovalEmails(db, id, leaveApp.number_of_days)
+            .catch(err => console.error('Final approval email error:', err.message));
 
           try {
             await notifyUser({
@@ -497,6 +714,7 @@ const updateLeaveApplicationStatus = async (req, res) => {
       application_status: applicationStatus
     });
   } catch (error) {
+    await db.run('ROLLBACK').catch(() => {});
     res.status(500).json({
       success: false,
       message: 'Error updating leave application',
@@ -584,6 +802,8 @@ const getLeaveApplicationById = async (req, res) => {
 
     const isOwner = application.user_id === req.user.id;
     const isAdmin = req.user.role === 'admin';
+    const isHR = req.user.role === 'hr';
+    const isDirector = req.user.role === 'director';
     const approvalAccess = await db.get(
       `SELECT id FROM approval_workflow
        WHERE leave_application_id = ?
@@ -592,7 +812,23 @@ const getLeaveApplicationById = async (req, res) => {
       [id, req.user.id, req.user.id]
     );
 
-    if (!isOwner && !isAdmin && !approvalAccess) {
+    // Directors can only view applications from their own department
+    let directorDeptAccess = false;
+    if (isDirector) {
+      const directorDept = await db.get(
+        `SELECT d.id FROM departments d WHERE d.director_id = ? LIMIT 1`,
+        [req.user.id]
+      );
+      if (directorDept) {
+        const applicantUser = await db.get(
+          'SELECT department_id FROM users WHERE id = ?',
+          [application.user_id]
+        );
+        directorDeptAccess = applicantUser?.department_id === directorDept.id;
+      }
+    }
+
+    if (!isOwner && !isAdmin && !isHR && !directorDeptAccess && !approvalAccess) {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
     }
 
@@ -615,8 +851,8 @@ const getLeaveApplicationById = async (req, res) => {
 };
 
 const updateOwnLeaveApplication = async (req, res) => {
+  const db = getDatabase();
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { leave_type_id, start_date, end_date, reason } = req.body;
 
@@ -641,9 +877,44 @@ const updateOwnLeaveApplication = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Leave type, start date, and end date are required' });
     }
 
-    const numberOfDays = countCalendarDays(start_date, end_date);
+    await db.run('BEGIN TRANSACTION');
+
+    const numberOfDays = await calculateBusinessDays(db, start_date, end_date);
     if (numberOfDays < 1) {
-      return res.status(400).json({ success: false, message: 'End date must be on or after start date' });
+      await db.run('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Requested leave dates contain no working days' });
+    }
+
+    const employeeGender = await getCurrentUserGender(db, req.user.id, req.user.gender);
+    const leaveType = await db.get('SELECT name, applicable_gender FROM leave_types WHERE id = ?', [leave_type_id]);
+    if (!leaveType) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Invalid leave type' });
+    }
+
+    if (!isLeaveTypeApplicableToGender(leaveType, employeeGender)) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'This leave type is not applicable to your gender' });
+    }
+
+    const currentYear = new Date(start_date).getFullYear();
+    const leaveBalance = await db.get(
+      `SELECT * FROM leave_balance WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
+      [req.user.id, leave_type_id, currentYear]
+    );
+
+    if (!leaveBalance || leaveBalance.remaining_days < numberOfDays) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient leave balance. Available: ${leaveBalance?.remaining_days || 0} days, Requested: ${numberOfDays} days.`
+      });
+    }
+
+    const overlappingApplication = await getOverlappingLeaveApplication(db, req.user.id, leave_type_id, start_date, end_date, id);
+    if (overlappingApplication) {
+      await db.run('ROLLBACK');
+      return res.status(400).json({ success: false, message: OVERLAP_MESSAGE });
     }
 
     await db.run(
@@ -659,6 +930,8 @@ const updateOwnLeaveApplication = async (req, res) => {
        WHERE leave_application_id = ? AND status IN ('pending', 'not_required')`,
       [id]
     );
+
+    await db.run('COMMIT');
 
     try {
       await notifyUser({
@@ -679,6 +952,7 @@ const updateOwnLeaveApplication = async (req, res) => {
       message: 'Leave application updated successfully'
     });
   } catch (error) {
+    await db.run('ROLLBACK').catch(() => {});
     res.status(500).json({
       success: false,
       message: 'Error updating application',
@@ -716,44 +990,142 @@ const downloadLeaveApplication = async (req, res) => {
     }
 
     const isOwner = application.user_id === req.user.id;
-    const isPrivileged = ['admin', 'hr', 'chief_officer'].includes(req.user.role);
+    const isPrivileged = ['admin', 'hr', 'director'].includes(req.user.role);
     if (!isOwner && !isPrivileged) {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
     }
 
     const workflow = await getApplicationWorkflow(db, id);
     const employeeName = [application.first_name, application.middle_name, application.last_name].filter(Boolean).join(' ');
-    const workflowText = workflow.length
-      ? workflow.map(step => `- ${step.approval_level}: ${step.status}${step.approver_name ? ` by ${step.approver_name}` : ''}${step.approved_at ? ` on ${formatDate(step.approved_at)}` : ''}${step.comments ? ` (${step.comments})` : ''}`).join('\n')
-      : '- No approval workflow recorded';
 
-    const content = [
-      'LEAVE APPLICATION FORM',
-      '',
-      `Application ID: ${application.id}`,
-      `Employee Name: ${employeeName}`,
-      `Employee ID: ${application.employee_id || ''}`,
-      `Department: ${application.department || ''}`,
-      `Designation: ${application.designation || ''}`,
-      `Email: ${application.email || ''}`,
-      `Phone: ${application.phone || ''}`,
-      '',
-      `Leave Type: ${application.leave_type_name}`,
-      `Start Date: ${formatDate(application.start_date)}`,
-      `End Date: ${formatDate(application.end_date)}`,
-      `Number of Days: ${application.number_of_days}`,
-      `Reason: ${application.reason || ''}`,
-      `Status: ${application.status}`,
-      `Submitted: ${application.created_at || ''}`,
-      '',
-      'Approval Steps:',
-      workflowText,
-      ''
-    ].join('\n');
+    // Generate PDF
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="leave-application-${application.id}.txt"`);
-    res.send(content);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="leave-application-${application.id}.pdf"`);
+    doc.pipe(res);
+
+    const pageWidth = doc.page.width - 100;
+
+    // --- HEADER ---
+    doc.fontSize(16).font('Helvetica-Bold').text('COUNTY GOVERNMENT OF BUSIA', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica').text('Leave Management System', { align: 'center' });
+    doc.moveDown(0.5);
+
+    // Divider
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(1.5).stroke('#1B7340');
+    doc.moveDown(0.5);
+
+    // Title
+    doc.fontSize(14).font('Helvetica-Bold').text('LEAVE APPLICATION FORM', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(9).font('Helvetica').fillColor('#666666')
+      .text(`Reference No: LA-${String(application.id).padStart(5, '0')}`, { align: 'center' });
+    doc.fillColor('#000000');
+    doc.moveDown(1);
+
+    // --- SECTION: Employee Details ---
+    const sectionY = doc.y;
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#1B7340').text('EMPLOYEE DETAILS');
+    doc.fillColor('#000000');
+    doc.moveDown(0.3);
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(0.5).stroke('#cccccc');
+    doc.moveDown(0.5);
+
+    const fieldRows = [
+      ['Full Name', employeeName, 'Employee ID', application.employee_id || 'N/A'],
+      ['Department', application.department || 'N/A', 'Designation', application.designation || 'N/A'],
+      ['Email', application.email || 'N/A', 'Phone', application.phone || 'N/A'],
+    ];
+
+    doc.fontSize(9).font('Helvetica');
+    fieldRows.forEach(([label1, val1, label2, val2]) => {
+      const y = doc.y;
+      doc.font('Helvetica-Bold').text(label1 + ':', 50, y, { width: 90, continued: false });
+      doc.font('Helvetica').text(val1, 145, y, { width: 170 });
+      doc.font('Helvetica-Bold').text(label2 + ':', 330, y, { width: 90 });
+      doc.font('Helvetica').text(val2, 425, y, { width: 130 });
+      doc.moveDown(0.6);
+    });
+    doc.moveDown(0.8);
+
+    // --- SECTION: Leave Details ---
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#1B7340').text('LEAVE DETAILS');
+    doc.fillColor('#000000');
+    doc.moveDown(0.3);
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(0.5).stroke('#cccccc');
+    doc.moveDown(0.5);
+
+    const leaveRows = [
+      ['Leave Type', application.leave_type_name, 'Number of Days', String(application.number_of_days)],
+      ['Start Date', formatDate(application.start_date), 'End Date', formatDate(application.end_date)],
+      ['Status', application.status.toUpperCase(), 'Date Applied', formatDate(application.created_at)],
+    ];
+
+    doc.fontSize(9).font('Helvetica');
+    leaveRows.forEach(([label1, val1, label2, val2]) => {
+      const y = doc.y;
+      doc.font('Helvetica-Bold').text(label1 + ':', 50, y, { width: 90 });
+      doc.font('Helvetica').text(val1, 145, y, { width: 170 });
+      doc.font('Helvetica-Bold').text(label2 + ':', 330, y, { width: 90 });
+      doc.font('Helvetica').text(val2, 425, y, { width: 130 });
+      doc.moveDown(0.6);
+    });
+
+    if (application.reason) {
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Bold').text('Reason:', 50);
+      doc.moveDown(0.2);
+      doc.font('Helvetica').text(application.reason, 50, doc.y, { width: pageWidth });
+    }
+    doc.moveDown(1);
+
+    // --- SECTION: Approval Workflow ---
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#1B7340').text('APPROVAL WORKFLOW');
+    doc.fillColor('#000000');
+    doc.moveDown(0.3);
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(0.5).stroke('#cccccc');
+    doc.moveDown(0.5);
+
+    if (workflow.length === 0) {
+      doc.fontSize(9).font('Helvetica').text('No approval records available.', 50);
+    } else {
+      // Table header
+      const tableTop = doc.y;
+      doc.fontSize(8).font('Helvetica-Bold');
+      doc.text('Level', 50, tableTop, { width: 100 });
+      doc.text('Status', 155, tableTop, { width: 80 });
+      doc.text('Approver', 240, tableTop, { width: 120 });
+      doc.text('Date', 365, tableTop, { width: 90 });
+      doc.text('Comments', 455, tableTop, { width: 100 });
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(0.3).stroke('#dddddd');
+      doc.moveDown(0.3);
+
+      doc.fontSize(8).font('Helvetica');
+      workflow.forEach(step => {
+        const y = doc.y;
+        doc.text(step.approval_level || 'N/A', 50, y, { width: 100 });
+        doc.text(step.status || 'Pending', 155, y, { width: 80 });
+        doc.text(step.approver_name || 'N/A', 240, y, { width: 120 });
+        doc.text(step.approved_at ? formatDate(step.approved_at) : '—', 365, y, { width: 90 });
+        doc.text(step.comments || '—', 455, y, { width: 100 });
+        doc.moveDown(0.5);
+      });
+    }
+
+    // --- FOOTER ---
+    doc.moveDown(2);
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(1).stroke('#1B7340');
+    doc.moveDown(0.5);
+    doc.fontSize(8).font('Helvetica').fillColor('#888888')
+      .text(`Generated on ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${new Date().toLocaleTimeString('en-GB')}`, { align: 'center' });
+    doc.moveDown(0.2);
+    doc.text('County Government of Busia — Leave Management System — ICT & Digital Economy Directorate', { align: 'center' });
+
+    doc.end();
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -770,7 +1142,12 @@ const cancelLeaveApplication = async (req, res) => {
     const { id } = req.params;
 
     const application = await db.get(
-      `SELECT status, user_id FROM leave_applications WHERE id = ?`,
+      `SELECT la.status, la.user_id, la.leave_type_id, la.start_date, la.end_date, la.number_of_days,
+              lt.name as leave_type, u.first_name, u.last_name, u.reporting_officer_id
+       FROM leave_applications la
+       JOIN leave_types lt ON la.leave_type_id = lt.id
+       JOIN users u ON la.user_id = u.id
+       WHERE la.id = ?`,
       [id]
     );
 
@@ -792,16 +1169,44 @@ const cancelLeaveApplication = async (req, res) => {
       ['cancelled', id]
     );
 
+    const applicantName = `${application.first_name} ${application.last_name}`;
+
     try {
+      // Notify the applicant
       await notifyUser({
         userId: req.user.id,
-        email: req.user.email,
-        phone: req.user.phone,
         type: 'leave_cancelled',
         title: 'Leave Request Cancelled',
-        message: 'Your pending leave request has been cancelled.',
+        message: `Your ${application.leave_type} request (${application.start_date} to ${application.end_date}) has been cancelled.`,
         referenceId: id
       });
+
+      // Notify the supervisor
+      if (application.reporting_officer_id) {
+        const supervisor = await db.get('SELECT id, email, phone FROM users WHERE id = ?', [application.reporting_officer_id]);
+        if (supervisor) {
+          await notifyUser({
+            userId: supervisor.id,
+            email: supervisor.email,
+            type: 'leave_cancelled',
+            title: 'Leave Request Cancelled',
+            message: `${applicantName} has cancelled their ${application.leave_type} request (${application.start_date} to ${application.end_date}).`,
+            referenceId: id
+          });
+        }
+      }
+
+      // Notify admin users
+      const adminUsers = await db.all(`SELECT id FROM users WHERE role = 'admin'`);
+      for (const admin of adminUsers) {
+        await notifyUser({
+          userId: admin.id,
+          type: 'leave_cancelled',
+          title: 'Leave Request Cancelled',
+          message: `${applicantName} cancelled their ${application.leave_type} request (${application.start_date} to ${application.end_date}).`,
+          referenceId: id
+        });
+      }
     } catch (err) {
       console.error('Notification error:', err.message);
     }
@@ -1038,6 +1443,44 @@ const getCarryoverData = async (req, res) => {
   }
 };
 
+/**
+ * Send final approval emails when a leave application is fully approved.
+ * Called from both leaveController and approvalRoutes.
+ */
+const sendFinalApprovalEmails = async (db, applicationId, approvedDays) => {
+  try {
+    const leaveApp = await db.get(
+      `SELECT la.user_id, la.leave_type_id, la.start_date, la.end_date, la.number_of_days,
+        lt.name as leave_type,
+        u.email as applicant_email, u.phone as applicant_phone,
+        u.first_name as applicant_first, u.last_name as applicant_last, u.employee_id
+       FROM leave_applications la
+       JOIN leave_types lt ON la.leave_type_id = lt.id
+       JOIN users u ON la.user_id = u.id
+       WHERE la.id = ?`,
+      [applicationId]
+    );
+
+    if (!leaveApp) return;
+
+    const days = approvedDays || leaveApp.number_of_days;
+
+    // Send polished HTML approval email to applicant
+    await sendLeaveApprovalEmail({
+      to: leaveApp.applicant_email,
+      firstName: leaveApp.applicant_first,
+      leaveType: leaveApp.leave_type,
+      startDate: leaveApp.start_date,
+      endDate: leaveApp.end_date,
+      numberOfDays: days,
+      comments: null
+    }).catch(err => console.error('Approval email error:', err.message));
+
+  } catch (err) {
+    console.error('sendFinalApprovalEmails error:', err.message);
+  }
+};
+
 module.exports = {
   submitLeaveApplication,
   getLeaveApplications,
@@ -1050,5 +1493,6 @@ module.exports = {
   cancelLeaveApplication,
   getAnalyticsTrends,
   getTeamStats,
-  getCarryoverData
+  getCarryoverData,
+  sendFinalApprovalEmails
 };

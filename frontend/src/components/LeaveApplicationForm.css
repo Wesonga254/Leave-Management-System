@@ -8,11 +8,11 @@
   text-align: center;
   margin-bottom: 40px;
   animation: fadeIn 0.5s ease-out;
-  border-bottom: 4px solid var(--primary-blue);
-  padding-bottom: 30px;
-  background: linear-gradient(135deg, rgba(46, 159, 216, 0.08) 0%, rgba(82, 183, 136, 0.08) 100%);
-  border-radius: 12px;
-  padding: 30px;
+  padding-bottom: 24px;
+  background: linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(46, 125, 50, 0.05) 100%);
+  border-radius: var(--radius-lg, 14px);
+  padding: 28px;
+  border: 1px solid var(--medium-gray, #e2e8f0);
 }
 
 .form-title {
@@ -39,12 +39,12 @@
 /* Form Sections */
 .form-section {
   background: white;
-  border-radius: 12px;
-  padding: 28px;
-  box-shadow: 0 2px 8px rgba(46, 159, 216, 0.1);
-  transition: all 0.3s ease;
-  border-left: 6px solid var(--primary-blue);
-  border-top: 3px solid var(--light-green);
+  border-radius: var(--radius-lg, 14px);
+  padding: 24px;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+  transition: all 0.2s ease;
+  border: 1px solid var(--medium-gray, #e2e8f0);
+  border-left: 4px solid var(--forest-green);
 }
 
 .form-section:hover {
@@ -53,15 +53,14 @@
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  color: var(--dark-black);
-  margin: 0 0 20px 0;
+  color: var(--dark-black, #0f172a);
+  margin: 0 0 18px 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-bottom: 3px solid var(--primary-blue);
-  padding-bottom: 12px;
+  gap: 8px;
+  padding-bottom: 10px;
 }
 
 .section-description {
@@ -115,7 +114,7 @@
 .form-control:focus {
   outline: none;
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 4px rgba(46, 159, 216, 0.2);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.1);
   background: white;
 }
 
@@ -148,11 +147,10 @@
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(82, 183, 136, 0.2) 0%, rgba(82, 183, 136, 0.12) 100%);
-  border-radius: 10px;
-  border-left: 5px solid var(--light-green);
-  border-top: 3px solid var(--primary-blue);
-  margin: 20px 0;
+  background: #E8F5E9;
+  border-radius: var(--radius-md, 10px);
+  border-left: 4px solid var(--forest-green);
+  margin: 16px 0;
 }
 
 .balance-icon {
@@ -186,11 +184,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(46, 159, 216, 0.15) 0%, rgba(46, 159, 216, 0.08) 100%);
-  border-radius: 10px;
-  border-left: 5px solid var(--primary-blue);
-  border-top: 3px solid var(--light-green);
-  margin: 20px 0;
+  background: #E3F2FD;
+  border-radius: var(--radius-md, 10px);
+  border-left: 4px solid var(--county-blue);
+  margin: 16px 0;
 }
 
 .days-label {
@@ -279,21 +276,21 @@
 
 /* Upload Button */
 .btn-upload {
-  background: linear-gradient(135deg, var(--light-green) 0%, #45a370 100%);
+  background: var(--forest-green);
   color: white;
   border: none;
-  padding: 12px 20px;
-  border-radius: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm, 6px);
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   align-self: flex-start;
-  margin-top: 10px;
-  box-shadow: 0 4px 12px rgba(82, 183, 136, 0.4);
+  margin-top: 8px;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.25);
 }
 
 .btn-upload:hover:not(:disabled) {
@@ -418,7 +415,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  box-shadow: 0 4px 12px rgba(82, 183, 136, 0.4);
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.25);
   border-radius: 8px;
   background: var(--light-green);
   color: white;
@@ -432,9 +429,9 @@
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: #45a370;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(82, 183, 136, 0.5);
+  background: var(--forest-green-dark, #145A32);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.35);
 }
 
 .btn-submit:disabled {
@@ -501,16 +498,16 @@
 
 /* Submit Section */
 .form-section-submit {
-  background: linear-gradient(135deg, rgba(46, 159, 216, 0.15) 0%, rgba(82, 183, 136, 0.15) 100%);
-  border-left: 6px solid var(--primary-blue);
-  border-top: 3px solid var(--light-green);
+  background: linear-gradient(135deg, rgba(21, 101, 192, 0.06) 0%, rgba(46, 125, 50, 0.06) 100%);
+  border-left: 4px solid var(--forest-green);
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 16px 20px;
-  margin-top: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(46, 159, 216, 0.15);
+  margin-top: 16px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--medium-gray, #e2e8f0);
+  border-left: 4px solid var(--forest-green);
 }
 
 /* Success Section */
@@ -547,7 +544,7 @@
     flex-direction: column;
     text-align: center;
     border-left: none;
-    border-top: 4px solid #667eea;
+    border-top: 3px solid var(--forest-green);
   }
 
   .days-counter {
@@ -672,3 +669,106 @@
     width: 100%;
   }
 }
+
+/* ===== Confirmation Modal ===== */
+.leave-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.leave-confirm-modal {
+  background: white;
+  border-radius: 16px;
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.25s ease-out;
+}
+
+.leave-confirm-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dark-black, #0f172a);
+  margin: 0 0 4px;
+}
+
+.leave-confirm-subtitle {
+  font-size: 14px;
+  color: var(--dark-gray, #64748b);
+  margin: 0 0 24px;
+}
+
+.leave-confirm-details {
+  background: var(--light-gray, #f8fafc);
+  border: 1px solid var(--medium-gray, #e2e8f0);
+  border-radius: 12px;
+  padding: 4px 0;
+  margin-bottom: 24px;
+}
+
+.leave-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 20px;
+  gap: 16px;
+}
+
+.leave-confirm-row + .leave-confirm-row {
+  border-top: 1px solid var(--medium-gray, #e2e8f0);
+}
+
+.leave-confirm-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-gray, #64748b);
+  flex-shrink: 0;
+  min-width: 100px;
+}
+
+.leave-confirm-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-black, #0f172a);
+  text-align: right;
+  word-break: break-word;
+}
+
+.leave-confirm-days {
+  color: var(--primary-blue, #1565C0);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.leave-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+  .leave-confirm-modal {
+    padding: 24px 20px;
+  }
+
+  .leave-confirm-actions {
+    flex-direction: column;
+  }
+
+  .leave-confirm-actions .btn-submit {
+    width: 100%;
+  }
+
+  .leave-confirm-actions .btn-secondary {
+    width: 100%;
+  }
+}
+

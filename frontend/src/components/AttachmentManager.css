@@ -112,7 +112,7 @@
 }
 
 .attachment-table .file-name {
-  color: #3498db;
+  color: var(--county-blue);
   font-weight: 500;
   word-break: break-word;
 }

@@ -4,6 +4,11 @@ const { notifyUser } = require('../utils/notifications');
 // Delegate an approval to another user
 const delegateApproval = async (req, res) => {
   try {
+    return res.status(403).json({
+      success: false,
+      message: 'Delegation is disabled. Leave requests must be approved by the employee\'s direct Supervisor.'
+    });
+
     const db = getDatabase();
     const { applicationId, delegatedTo } = req.body;
     if (!applicationId || !delegatedTo) return res.status(400).json({ message: 'applicationId and delegatedTo are required' });

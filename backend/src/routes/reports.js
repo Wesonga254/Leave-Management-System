@@ -10,18 +10,18 @@ router.use(authenticateToken);
 router.get('/employee-leave-history', reportController.getEmployeeLeaveHistory);
 
 // Department Leave Report - HR and above
-router.get('/department-report', authorizeRole('hr', 'chief_officer'), reportController.getDepartmentLeaveReport);
+router.get('/department-report', authorizeRole('hr', 'admin'), reportController.getDepartmentLeaveReport);
 
 // Leave Balance Report - HR and above
-router.get('/leave-balance', authorizeRole('hr', 'chief_officer'), reportController.getLeaveBalanceReport);
+router.get('/leave-balance', authorizeRole('hr', 'admin'), reportController.getLeaveBalanceReport);
 
 // Pending Approval Report - Managers and above
-router.get('/pending-approvals', authorizeRole('manager', 'hr', 'chief_officer'), reportController.getPendingApprovalReport);
+router.get('/pending-approvals', authorizeRole('manager', 'hr', 'admin'), reportController.getPendingApprovalReport);
 
 // Monthly Leave Trends - HR and above
-router.get('/monthly-trends', authorizeRole('hr', 'chief_officer'), reportController.getMonthlyLeaveTrends);
+router.get('/monthly-trends', authorizeRole('hr', 'admin'), reportController.getMonthlyLeaveTrends);
 
 // Summary Dashboard - HR and above
-router.get('/summary-dashboard', authorizeRole('hr', 'chief_officer'), reportController.getSummaryDashboard);
+router.get('/summary-dashboard', authorizeRole('hr', 'admin'), reportController.getSummaryDashboard);
 
 module.exports = router;

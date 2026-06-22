@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 });
 
 // Create leave type (HR only)
-router.post('/', authenticateToken, authorizeRole('hr', 'chief_officer'), [
+router.post('/', authenticateToken, authorizeRole('hr', 'admin'), [
   body('name').trim().notEmpty().withMessage('Leave type name is required'),
   body('annual_limit').isInt({ min: 1 }).withMessage('Annual limit must be a positive number'),
   body('description').optional().trim()

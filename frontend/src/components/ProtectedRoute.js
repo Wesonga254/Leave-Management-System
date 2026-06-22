@@ -1,5 +1,13 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { hasRole } from '../utils/roleHelper';
+
+const Forbidden = () => (
+  <div className="card">
+    <h2 className="card-title">Access restricted</h2>
+    <p className="subtitle">You do not have permission to view this page.</p>
+  </div>
+);
 
 /**
  * HOC for protected routes that requires authentication and/or specific roles
@@ -19,8 +27,8 @@ export const withAuth = (Component, allowedRoles = null) => {
     }
 
     // Check if specific roles are required
-    if (allowedRoles && !allowedRoles.includes(userRole)) {
-      return <Navigate to="/dashboard" replace />;
+    if (allowedRoles && !hasRole(userRole, allowedRoles)) {
+      return <Forbidden />;
     }
 
     return <Component {...props} userRole={userRole} userId={userId} />;
@@ -43,8 +51,8 @@ export const ProtectedRoute = ({
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />;
+  if (allowedRoles && !hasRole(userRole, allowedRoles)) {
+    return <Forbidden />;
   }
 
   return <Component {...rest} userRole={userRole} userId={userId} />;

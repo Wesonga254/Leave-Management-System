@@ -6,9 +6,9 @@
 export const getRoleBasedRedirect = (role) => {
   const roleRedirects = {
     admin: '/admin-dashboard',
-    supervisor: '/approval-queue',
-    hr: '/dashboard',
-    chief_officer: '/dashboard',
+    supervisor: '/dashboard',
+    hr: '/hr-dashboard',
+    director: '/dashboard',
     employee: '/dashboard'
   };
 
@@ -22,11 +22,21 @@ export const getRoleBasedRedirect = (role) => {
  * @returns {boolean}
  */
 export const hasRole = (userRole, requiredRoles) => {
-  if (!userRole) return false;
+  const normalizedRole = normalizeRole(userRole);
+  if (!normalizedRole) return false;
+  const normalizedRequired = Array.isArray(requiredRoles)
+    ? requiredRoles.map(normalizeRole)
+    : normalizeRole(requiredRoles);
   if (Array.isArray(requiredRoles)) {
-    return requiredRoles.includes(userRole);
+    return normalizedRequired.includes(normalizedRole);
   }
-  return userRole === requiredRoles;
+  return normalizedRole === normalizedRequired;
+};
+
+export const normalizeRole = (role) => {
+  const value = String(role || '').trim().toLowerCase();
+  if (value === 'hr_manager' || value === 'hr manager' || value === 'human_resources') return 'hr';
+  return value;
 };
 
 /**
@@ -35,14 +45,15 @@ export const hasRole = (userRole, requiredRoles) => {
  * @returns {string}
  */
 export const getRoleName = (role) => {
+  const normalizedRole = normalizeRole(role);
   const roleNames = {
     admin: 'Administrator',
     supervisor: 'Supervisor',
     hr: 'HR Manager',
-    chief_officer: 'Chief Officer',
+    director: 'Director',
     employee: 'Employee'
   };
-  return roleNames[role] || role;
+  return roleNames[normalizedRole] || role;
 };
 
 /**
@@ -58,6 +69,7 @@ export const getRoleIcon = (role) => {
 export default {
   getRoleBasedRedirect,
   hasRole,
+  normalizeRole,
   getRoleName,
   getRoleIcon
 };
