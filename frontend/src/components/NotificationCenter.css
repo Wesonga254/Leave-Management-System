@@ -212,6 +212,16 @@
   min-width: 28px;
 }
 
+.notification-icon .notif-icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .notification-details {
   flex: 1;
   min-width: 0;

@@ -100,9 +100,9 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
   position: sticky;
   top: 90px;
   align-self: flex-start;
-  background: var(--white);
-  border-right: 1px solid var(--medium-gray);
-  box-shadow: 1px 0 6px rgba(0,0,0,0.04);
+  background: linear-gradient(180deg, #1a3a5c 0%, #0f2744 100%);
+  border-right: 1px solid rgba(45, 107, 176, 0.3);
+  box-shadow: 2px 0 12px rgba(15, 23, 42, 0.15);
   padding: 20px 14px;
   z-index: 90;
   overflow: hidden;
@@ -115,11 +115,12 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
   padding-right: 0;
   border-right-color: transparent;
   box-shadow: none;
+  background: transparent;
 }
 
 .sidebar-header {
   padding: 6px 8px 18px;
-  border-bottom: 1px solid var(--medium-gray);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   margin-bottom: 16px;
   min-width: 220px;
 }
@@ -135,7 +136,7 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
 }
 
 .sidebar-header h2 {
-  color: var(--dark-black);
+  color: var(--white);
   font-size: 22px;
   font-weight: 800;
   margin: 0;
@@ -156,9 +157,9 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
   gap: 12px;
   padding: 12px;
   margin-bottom: 14px;
-  border: 1px solid rgba(141, 198, 63, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(141, 198, 63, 0.08) 0%, rgba(45, 107, 176, 0.06) 100%);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .sidebar-user-avatar {
@@ -170,20 +171,20 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
   overflow: hidden;
   flex-shrink: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--lime-green-dark) 0%, var(--forest-green) 100%);
+  background: linear-gradient(135deg, var(--lime-green) 0%, var(--lime-green-dark) 100%);
   color: white;
   font-weight: 800;
   font-size: 14px;
-  border: 2px solid white;
-  box-shadow: 0 2px 8px rgba(141, 198, 63, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .sidebar-user-meta { min-width: 0; display: grid; gap: 2px; }
 .sidebar-user-meta strong, .sidebar-user-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-user-meta strong { color: var(--dark-black); font-size: 13px; }
-.sidebar-user-meta span { color: var(--dark-gray); font-size: 11px; text-transform: capitalize; }
+.sidebar-user-meta strong { color: var(--white); font-size: 13px; }
+.sidebar-user-meta span { color: rgba(255, 255, 255, 0.55); font-size: 11px; text-transform: capitalize; }
 
 .sidebar-link {
   display: flex;
@@ -191,7 +192,7 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
   min-height: 40px;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
-  color: #475569;
+  color: rgba(255, 255, 255, 0.75);
   text-decoration: none;
   font-size: 13.5px;
   font-weight: 600;
@@ -207,20 +208,20 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
 }
 
 .sidebar-link:hover {
-  background: rgba(21, 101, 192, 0.07);
-  color: var(--royal-blue);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
   transform: translateX(2px);
 }
 
 .sidebar-action:hover {
-  background: rgba(198, 40, 40, 0.07);
-  color: var(--danger);
+  background: rgba(220, 38, 38, 0.15);
+  color: #fca5a5;
 }
 
 .sidebar-link.active {
-  background: linear-gradient(135deg, var(--forest-green) 0%, var(--forest-green-dark) 100%);
+  background: linear-gradient(135deg, var(--county-blue) 0%, var(--county-blue-light) 100%);
   color: var(--white);
-  box-shadow: 0 2px 8px rgba(27, 115, 64, 0.3);
+  box-shadow: 0 2px 10px rgba(45, 107, 176, 0.4);
 }
 
 /* ===== NAVBAR ===== */
@@ -853,7 +854,7 @@ button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var
     box-shadow: 6px 0 20px rgba(0,0,0,0.15);
     transform: translateX(0);
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s ease;
-    border-right: 1px solid var(--medium-gray);
+    border-right: 1px solid rgba(45, 107, 176, 0.3);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }

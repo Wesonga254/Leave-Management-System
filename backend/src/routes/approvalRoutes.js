@@ -238,10 +238,10 @@ router.put('/applications/:applicationId/approve',
           email: leaveApp.applicant_email,
           phone: leaveApp.applicant_phone,
           type: appStatus === 'approved' ? 'approval' : 'rejection',
-          title: appStatus === 'approved' ? 'Leave Request Approved' : 'Leave Request Rejected',
+          title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
           message: appStatus === 'approved'
-            ? `Your leave request (${leaveApp.leave_type}) from ${leaveApp.start_date} to ${leaveApp.end_date} has been approved by your supervisor.${comments ? ` Comments: ${comments}` : ''}`
-            : `Your leave request (${leaveApp.leave_type}) from ${leaveApp.start_date} to ${leaveApp.end_date} has been rejected. Reason: ${comments || 'No reason provided'}`,
+            ? `Your ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) has been approved.${comments ? ' Note: ' + comments : ''}`
+            : `Your ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) was not approved.${comments ? ' Reason: ' + comments : ''}`,
           referenceId: applicationId
         });
 
@@ -254,10 +254,10 @@ router.put('/applications/:applicationId/approve',
             email: hr.email,
             phone: hr.phone,
             type: appStatus === 'approved' ? 'leave_hr_notice' : 'leave_hr_notice',
-            title: appStatus === 'approved' ? 'Leave Approved by Supervisor' : 'Leave Rejected by Supervisor',
+            title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
             message: appStatus === 'approved'
-              ? `${applicantName} (${leaveApp.employee_id || 'N/A'}) had their ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) approved for ${adjustedDays} day(s).${comments ? ` Comments: ${comments}` : ''}`
-              : `${applicantName} (${leaveApp.employee_id || 'N/A'}) had their ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) rejected. Reason: ${comments || 'No reason provided'}`,
+              ? `${applicantName} (${leaveApp.employee_id || 'N/A'}) — ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) approved, ${adjustedDays} day(s).${comments ? ' Note: ' + comments : ''}`
+              : `${applicantName} (${leaveApp.employee_id || 'N/A'}) — ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) not approved.${comments ? ' Reason: ' + comments : ''}`,
             referenceId: applicationId
           });
         }
@@ -276,10 +276,10 @@ router.put('/applications/:applicationId/approve',
                 email: director.email,
                 phone: director.phone,
                 type: appStatus === 'approved' ? 'leave_approved_info' : 'leave_rejected_info',
-                title: appStatus === 'approved' ? 'Leave Approved by Supervisor' : 'Leave Rejected by Supervisor',
+                title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
                 message: appStatus === 'approved'
-                  ? `${applicantName}'s ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) was approved for ${adjustedDays} day(s).`
-                  : `${applicantName}'s ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) was rejected. Reason: ${comments || 'No reason provided'}`,
+                  ? `${applicantName}'s ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) approved, ${adjustedDays} day(s).`
+                  : `${applicantName}'s ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) not approved.${comments ? ' Reason: ' + comments : ''}`,
                 referenceId: applicationId
               });
             }
@@ -294,10 +294,10 @@ router.put('/applications/:applicationId/approve',
               email: dir.email,
               phone: dir.phone,
               type: appStatus === 'approved' ? 'leave_approved_info' : 'leave_rejected_info',
-              title: appStatus === 'approved' ? 'Leave Approved by Supervisor' : 'Leave Rejected by Supervisor',
+              title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
               message: appStatus === 'approved'
-                ? `${applicantName}'s ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) was approved for ${adjustedDays} day(s).`
-                : `${applicantName}'s ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) was rejected. Reason: ${comments || 'No reason provided'}`,
+                ? `${applicantName}'s ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) approved, ${adjustedDays} day(s).`
+                : `${applicantName}'s ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) not approved.${comments ? ' Reason: ' + comments : ''}`,
               referenceId: applicationId
             });
           }
@@ -323,8 +323,8 @@ router.put('/applications/:applicationId/approve',
           await notifyUser({
             userId: admin.id,
             type: appStatus === 'approved' ? 'leave_approved_info' : 'leave_rejected_info',
-            title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Rejected',
-            message: `${applicantName}'s ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) was ${appStatus}.`,
+            title: appStatus === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
+            message: `${applicantName}'s ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) was ${appStatus}.`,
             referenceId: applicationId
           });
         }
@@ -344,6 +344,129 @@ router.put('/applications/:applicationId/approve',
         message: 'Error updating approval',
         error: error.message
       });
+    }
+  }
+);
+
+// Bulk approve/reject multiple applications
+router.post('/bulk-action',
+  authenticateToken,
+  authorizeExactRole('supervisor'),
+  async (req, res) => {
+    try {
+      const db = getDatabase();
+      const { applicationIds, status, comments } = req.body;
+
+      if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'applicationIds must be a non-empty array' });
+      }
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'status must be approved or rejected' });
+      }
+      if (applicationIds.length > 50) {
+        return res.status(400).json({ success: false, message: 'Maximum 50 applications per bulk action' });
+      }
+
+      const results = { succeeded: [], failed: [] };
+
+      for (const appId of applicationIds) {
+        try {
+          const workflow = await db.get(
+            `SELECT aw.id, aw.leave_application_id, la.user_id, la.leave_type_id, la.start_date,
+                    la.number_of_days, la.status as app_status, la.requested_days
+             FROM approval_workflow aw
+             JOIN leave_applications la ON aw.leave_application_id = la.id
+             WHERE aw.leave_application_id = ?
+               AND aw.approval_level = 'supervisor'
+               AND aw.status = 'pending'
+               AND (aw.approver_id = ? OR aw.delegated_to = ?)
+               AND la.status = 'pending'`,
+            [appId, req.user.id, req.user.id]
+          );
+
+          if (!workflow) {
+            results.failed.push({ id: appId, reason: 'Not pending for your approval' });
+            continue;
+          }
+
+          const days = workflow.number_of_days;
+
+          if (status === 'approved') {
+            const balanceYear = new Date(workflow.start_date).getFullYear();
+            const balance = await db.get(
+              `SELECT remaining_days FROM leave_balance WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
+              [workflow.user_id, workflow.leave_type_id, balanceYear]
+            );
+            if (!balance || balance.remaining_days < days) {
+              results.failed.push({ id: appId, reason: 'Insufficient leave balance' });
+              continue;
+            }
+          }
+
+          await db.run('BEGIN TRANSACTION');
+
+          await db.run(
+            `UPDATE approval_workflow SET status = ?, comments = ?, approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [status, comments || null, workflow.id]
+          );
+
+          const originalDays = workflow.requested_days || workflow.number_of_days;
+          await db.run(
+            `INSERT INTO leave_approval_audit (leave_application_id, approver_id, action, original_days, adjusted_days, comments) VALUES (?, ?, ?, ?, ?, ?)`,
+            [appId, req.user.id, status, originalDays, status === 'approved' ? days : null, comments || null]
+          );
+
+          await db.run(
+            `UPDATE leave_applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [status, appId]
+          );
+
+          if (status === 'approved') {
+            const balanceYear = new Date(workflow.start_date).getFullYear();
+            await db.run(
+              `UPDATE leave_balance SET used_days = used_days + ?, remaining_days = remaining_days - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
+              [days, days, workflow.user_id, workflow.leave_type_id, balanceYear]
+            );
+          }
+
+          await db.run('COMMIT');
+
+          // Send notification (async, don't block)
+          const leaveApp = await db.get(
+            `SELECT u.email, u.phone, u.first_name, lt.name as leave_type, la.start_date, la.end_date
+             FROM leave_applications la JOIN users u ON la.user_id = u.id JOIN leave_types lt ON la.leave_type_id = lt.id
+             WHERE la.id = ?`, [appId]
+          );
+          if (leaveApp) {
+            notifyUser({
+              userId: workflow.user_id,
+              email: leaveApp.email,
+              phone: leaveApp.phone,
+              type: status === 'approved' ? 'approval' : 'rejection',
+              title: status === 'approved' ? 'Leave Approved' : 'Leave Not Approved',
+              message: `Your ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) has been ${status}.${comments ? ' Note: ' + comments : ''}`,
+              referenceId: appId
+            }).catch(err => console.error('Bulk notification error:', err.message));
+          }
+
+          if (status === 'approved') {
+            sendFinalApprovalEmails(db, appId, days).catch(() => {});
+          }
+
+          results.succeeded.push(appId);
+        } catch (err) {
+          await db.run('ROLLBACK').catch(() => {});
+          results.failed.push({ id: appId, reason: err.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Processed ${results.succeeded.length} of ${applicationIds.length} applications`,
+        results
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 );

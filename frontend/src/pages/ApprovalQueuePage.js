@@ -22,6 +22,8 @@ function ApprovalQueuePage({ userRole, userId }) {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const errorRef = useRef(null);
   const errorTimerRef = useRef(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Auto-clear error messages after a delay
   const setAutoError = (msg) => {
@@ -208,6 +210,44 @@ function ApprovalQueuePage({ userRole, userId }) {
     return roleNames[userRole] || 'Approver';
   };
 
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredApplications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredApplications.map(a => a.id)));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkAction = async (bulkStatus) => {
+    const label = bulkStatus === 'approved' ? 'approve' : 'reject';
+    if (!window.confirm(`Are you sure you want to ${label} ${selectedIds.size} selected application(s)?`)) return;
+    try {
+      setBulkProcessing(true);
+      const res = await leaveService.bulkAction({
+        applicationIds: [...selectedIds],
+        status: bulkStatus,
+        comments: bulkStatus === 'rejected' ? 'Bulk rejected by supervisor' : ''
+      });
+      const r = res.data.results || {};
+      showToast(`${(r.succeeded || []).length} ${label}d, ${(r.failed || []).length} failed`, 'success');
+      setSelectedIds(new Set());
+      triggerNotificationRefresh();
+      await fetchPendingApplications();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Bulk action failed', 'error');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading approval queue...</div>;
   }
@@ -236,6 +276,22 @@ function ApprovalQueuePage({ userRole, userId }) {
 
         {error && !showModal && <div className="alert alert-error">{error}</div>}
 
+        {/* Bulk Action Bar */}
+        {selectedIds.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#eff6ff', borderRadius: 8, marginBottom: 12, border: '1px solid #bfdbfe' }}>
+            <strong style={{ fontSize: 13, color: '#1e40af' }}>{selectedIds.size} selected</strong>
+            <button className="btn btn-primary" onClick={() => handleBulkAction('approved')} disabled={bulkProcessing} style={{ padding: '6px 16px', fontSize: 13, borderRadius: 6 }}>
+              ✅ Approve All
+            </button>
+            <button className="btn btn-danger" onClick={() => handleBulkAction('rejected')} disabled={bulkProcessing} style={{ padding: '6px 16px', fontSize: 13, borderRadius: 6 }}>
+              ❌ Reject All
+            </button>
+            <button className="btn btn-outline" onClick={() => setSelectedIds(new Set())} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6 }}>
+              Clear
+            </button>
+          </div>
+        )}
+
         {/* Queue Table */}
         {filteredApplications.length === 0 ? (
           <div className="empty-state">
@@ -247,6 +303,9 @@ function ApprovalQueuePage({ userRole, userId }) {
             <table className="table">
               <thead>
                 <tr>
+                  <th style={{ width: 40 }}>
+                    <input type="checkbox" checked={selectedIds.size === filteredApplications.length && filteredApplications.length > 0} onChange={toggleSelectAll} title="Select all" />
+                  </th>
                   <th>Employee</th>
                   <th>Leave Type</th>
                   <th>Dates</th>
@@ -258,7 +317,10 @@ function ApprovalQueuePage({ userRole, userId }) {
               </thead>
               <tbody>
                 {filteredApplications.map(app => (
-                  <tr key={app.id}>
+                  <tr key={app.id} style={selectedIds.has(app.id) ? { background: '#eff6ff' } : {}}>
+                    <td>
+                      <input type="checkbox" checked={selectedIds.has(app.id)} onChange={() => toggleSelectOne(app.id)} />
+                    </td>
                     <td data-label="Employee">
                       <strong>{app.employee_name || (app.first_name ? `${app.first_name} ${app.last_name}` : 'N/A')}</strong>
                       <small>{app.employee_id}</small>

@@ -43,21 +43,38 @@ function LeaveApplicationForm() {
     fetchHolidays();
   }, []);
 
+  const [dayBreakdown, setDayBreakdown] = useState(null);
+
   useEffect(() => {
     if (formData.start_date && formData.end_date) {
-      // compute business days excluding weekends and public holidays
-      const s = new Date(formData.start_date);
-      const e = new Date(formData.end_date);
-      let d = new Date(s);
-      let count = 0;
-      const holidaySet = new Set((holidays || []).map(h => h.date));
-      while (d <= e) {
-        const day = d.getDay();
-        const iso = d.toISOString().slice(0,10);
-        if (day !== 0 && day !== 6 && !holidaySet.has(iso)) count += 1;
-        d.setDate(d.getDate() + 1);
-      }
-      setNumberOfDays(Math.max(0, count));
+      // Call server for authoritative calculation with full breakdown
+      leaveService.calculateDays(formData.start_date, formData.end_date)
+        .then(res => {
+          if (res.data.success) {
+            const bd = res.data.data;
+            setNumberOfDays(Math.max(0, bd.workingDays));
+            setDayBreakdown(bd);
+          }
+        })
+        .catch(() => {
+          // Fallback: compute client-side excluding weekends and public holidays
+          const s = new Date(formData.start_date);
+          const e = new Date(formData.end_date);
+          let d = new Date(s);
+          let count = 0;
+          const holidaySet = new Set((holidays || []).map(h => h.date));
+          while (d <= e) {
+            const day = d.getDay();
+            const iso = d.toISOString().slice(0,10);
+            if (day !== 0 && day !== 6 && !holidaySet.has(iso)) count += 1;
+            d.setDate(d.getDate() + 1);
+          }
+          setNumberOfDays(Math.max(0, count));
+          setDayBreakdown(null);
+        });
+    } else {
+      setNumberOfDays(0);
+      setDayBreakdown(null);
     }
   }, [formData.start_date, formData.end_date, holidays]);
 
@@ -356,11 +373,44 @@ function LeaveApplicationForm() {
             </div>
           </div>
 
-          {/* Days Counter */}
+          {/* Days Counter with Breakdown */}
           <div className="days-counter">
-            <span className="days-label">Number of Days</span>
+            <span className="days-label">Working Days</span>
             <span className="days-value">{numberOfDays}</span>
           </div>
+          {dayBreakdown && numberOfDays > 0 && (dayBreakdown.weekendDays > 0 || dayBreakdown.holidayDays > 0) && (
+            <div className="days-breakdown">
+              <div className="breakdown-row">
+                <span className="breakdown-label">📅 Calendar days</span>
+                <span className="breakdown-value">{dayBreakdown.calendarDays}</span>
+              </div>
+              {dayBreakdown.weekendDays > 0 && (
+                <div className="breakdown-row excluded">
+                  <span className="breakdown-label">🚫 Weekends excluded</span>
+                  <span className="breakdown-value">−{dayBreakdown.weekendDays}</span>
+                </div>
+              )}
+              {dayBreakdown.holidayDays > 0 && (
+                <div className="breakdown-row excluded">
+                  <span className="breakdown-label">🏖️ Public holidays excluded</span>
+                  <span className="breakdown-value">−{dayBreakdown.holidayDays}</span>
+                </div>
+              )}
+              {dayBreakdown.excludedHolidays && dayBreakdown.excludedHolidays.length > 0 && (
+                <div className="breakdown-holidays">
+                  {dayBreakdown.excludedHolidays.map((h, i) => (
+                    <span key={i} className="holiday-tag">
+                      {h.name} ({new Date(h.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="breakdown-row total">
+                <span className="breakdown-label">✅ Working days charged</span>
+                <span className="breakdown-value">{dayBreakdown.workingDays}</span>
+              </div>
+            </div>
+          )}
 
           {/* Reason for Leave */}
           <div className="form-group">

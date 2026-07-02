@@ -15,6 +15,7 @@ const emptyUser = {
   date_of_birth: '',
   department: '',
   directorate_id: '',
+  designation: '',
   role: 'supervisor'
 };
 
@@ -50,6 +51,7 @@ function AdminUsersPage() {
   const [allDirectorates, setAllDirectorates] = useState([]);
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [directorateFilter, setDirectorateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [viewingUser, setViewingUser] = useState(null);
   const [viewLeaveData, setViewLeaveData] = useState(null);
@@ -119,12 +121,19 @@ function AdminUsersPage() {
     return users.filter(u => {
       const matchesDept = !departmentFilter || (u.department || '') === departmentFilter;
       if (!matchesDept) return false;
+      // Status filter
+      if (statusFilter) {
+        const uStatus = String(u.registration_status || 'approved').toLowerCase();
+        if (statusFilter === 'pending' && !uStatus.includes('pending')) return false;
+        if (statusFilter === 'approved' && uStatus !== 'approved') return false;
+        if (statusFilter === 'rejected' && uStatus !== 'rejected') return false;
+      }
       if (!needle) return true;
       const empId = (u.employee_id || '').toLowerCase();
       const fullName = `${u.first_name || ''} ${u.middle_name || ''} ${u.last_name || ''}`.toLowerCase();
       return empId.includes(needle) || fullName.includes(needle);
     });
-  }, [users, departmentFilter, employeeSearch]);
+  }, [users, departmentFilter, statusFilter, employeeSearch]);
 
   const fetchUsers = async () => {
     try {
@@ -422,6 +431,7 @@ function AdminUsersPage() {
                       </option>
                     ))}
                   </select>
+                  <input placeholder="Designation / Job Title" value={newUser.designation} onChange={e => setNewUser(s => ({ ...s, designation: e.target.value }))} />
                   <select value={newUser.role} onChange={e => setNewUser(s => ({ ...s, role: e.target.value }))}>
                     <option value="supervisor">Supervisor</option>
                     <option value="director">Director</option>
@@ -479,6 +489,14 @@ function AdminUsersPage() {
             value={employeeSearch}
             onChange={e => setEmployeeSearch(e.target.value)}
           />
+          {isAdmin && (
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="pending">Pending Approval</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          )}
           <span className="user-count">{filteredUsers.length} of {users.length} users</span>
         </div>
 
@@ -619,7 +637,7 @@ function AdminUsersPage() {
                     </div>
                     <div className="user-detail-field">
                       <span className="user-detail-label">Directorate</span>
-                      <span className="user-detail-value">{(() => { const dept = departments.find(d => d.name === viewingUser.department); return dept ? (allDirectorates.find(dir => dir.department_id === dept.id) || {}).name || '—' : '—'; })()}</span>
+                      <span className="user-detail-value">{viewingUser.directorate_name || '—'}</span>
                     </div>
                     <div className="user-detail-field">
                       <span className="user-detail-label">Designation</span>
@@ -707,8 +725,8 @@ function AdminUsersPage() {
                   <div className="user-detail-action-buttons">
                     {String(viewingUser.registration_status || '').toUpperCase() === 'PENDING_APPROVAL' && (
                       <>
-                        <button className="btn btn-primary" type="button" onClick={() => { reviewRegistration(viewingUser.id, 'APPROVED'); closeUserDetail(); }} disabled={actionLoading}>Approve Registration</button>
-                        <button className="btn btn-secondary" type="button" onClick={() => { reviewRegistration(viewingUser.id, 'REJECTED'); closeUserDetail(); }} disabled={actionLoading}>Reject Registration</button>
+                        <button className="btn btn-primary" type="button" onClick={() => { reviewRegistration(viewingUser.id, 'approved'); closeUserDetail(); }} disabled={actionLoading}>Approve Account</button>
+                        <button className="btn btn-secondary" type="button" onClick={() => { reviewRegistration(viewingUser.id, 'rejected'); closeUserDetail(); }} disabled={actionLoading}>Reject Account</button>
                       </>
                     )}
                     <button className="btn btn-primary" type="button" onClick={() => startEditInPanel(viewingUser)} disabled={actionLoading}>Edit User</button>

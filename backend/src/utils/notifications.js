@@ -44,12 +44,41 @@ const sendEmail = async (to, subject, text, html) => {
   return info;
 };
 
-const sendSms = async (to, message) => {
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) return false;
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  const msg = await client.messages.create({ body: message, from, to });
-  return msg;
+const sendSms = async (to, message, retries = 2) => {
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
+    console.warn('[SMS] Twilio not configured — SMS NOT sent to', to);
+    return false;
+  }
+
+  // Validate phone number format (must start with + and have 10-15 digits)
+  const cleaned = (to || '').replace(/[\s\-()]/g, '');
+  if (!/^\+\d{10,15}$/.test(cleaned)) {
+    console.warn('[SMS] Invalid phone number format:', to);
+    return false;
+  }
+
+  // Truncate message to SMS limit
+  const truncated = message.length > 1600 ? message.substring(0, 1597) + '...' : message;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const msg = await client.messages.create({
+        body: truncated,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: cleaned
+      });
+      console.log('[SMS] Sent to', cleaned, '— SID:', msg.sid);
+      return msg;
+    } catch (err) {
+      console.error(`[SMS] Attempt ${attempt + 1}/${retries + 1} failed for ${cleaned}:`, err.message);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // exponential backoff
+      }
+    }
+  }
+  console.error('[SMS] All retries exhausted for', cleaned);
+  return false;
 };
 
 const createInAppNotification = async (userId, type, title, message, referenceId = null) => {

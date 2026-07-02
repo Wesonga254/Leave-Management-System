@@ -134,6 +134,8 @@ const registerUser = async (req, res) => {
       kra_number,
       date_of_birth,
       department,
+      directorate_id,
+      designation,
       reporting_officer_id
     } = req.body;
 
@@ -177,10 +179,10 @@ const registerUser = async (req, res) => {
     const result = await db.run(
       `INSERT INTO users (
         username, employee_id, password_hash, email, phone, first_name, middle_name, last_name,
-        gender, kra_number, date_of_birth, department, department_id, designation, reporting_officer_id, role,
+        gender, kra_number, date_of_birth, department, department_id, directorate_id, designation, reporting_officer_id, role,
         registration_status, is_active, verified_by, verified_at
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         national_id,
         employee_id,
@@ -195,7 +197,8 @@ const registerUser = async (req, res) => {
         date_of_birth,
         departmentRecord?.name || department,
         departmentRecord?.id || null,
-        'Not Assigned',
+        directorate_id || null,
+        designation || 'Not Assigned',
         reporting_officer_id || null,
         assignedRole,
         registrationStatus,
@@ -220,6 +223,28 @@ const registerUser = async (req, res) => {
       });
     } catch (err) {
       console.error('Welcome email error:', err.message);
+    }
+
+    // Notify all admin users about the new registration
+    try {
+      const admins = await db.all(`SELECT id, email, phone FROM users WHERE role = 'admin'`);
+      const fullName = [first_name, last_name].filter(Boolean).join(' ');
+      const isApproved = registrationStatus === ACCOUNT_STATUS.APPROVED;
+      for (const admin of admins) {
+        await notifyUser({
+          userId: admin.id,
+          email: admin.email,
+          phone: admin.phone,
+          type: 'new_registration',
+          title: isApproved ? 'New Staff Account' : 'Registration Pending',
+          message: isApproved
+            ? `${fullName} (${employee_id}) has been added to ${department} as ${assignedRole}.`
+            : `${fullName} (${employee_id}) has registered under ${department} and needs approval.`,
+          referenceId: result.lastID
+        });
+      }
+    } catch (err) {
+      console.error('Admin notification error:', err.message);
     }
 
     const responseData = {

@@ -48,7 +48,10 @@ export const leaveService = {
   getAnalyticsTrends: (year) => api.get('/leave/analytics/trends', { params: { year } }),
   getTeamStats: (year) => api.get('/leave/analytics/team-stats', { params: { year } }),
   approveApplication: (id, data) => api.put(`/approval/applications/${id}/approve`, data),
-  getHolidays: () => api.get('/leave/holidays')
+  bulkAction: (data) => api.post('/approval/bulk-action', data),
+  getHolidays: () => api.get('/leave/holidays'),
+  calculateDays: (start, end) => api.get('/leave/calculate-days', { params: { start, end } }),
+  getIcalExport: () => api.get('/leave/calendar/export.ics', { responseType: 'blob' })
 };
 
 export const reportService = {

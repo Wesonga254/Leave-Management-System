@@ -154,10 +154,18 @@ function ReportsPage() {
     );
   };
 
-  const exportServerCSV = async () => {
+  const getExportType = () => {
+    if (activeTab === 'balance') return 'balance';
+    if (activeTab === 'pending') return 'pending';
+    if (activeTab === 'trends') return 'monthly';
+    return 'department';
+  };
+
+  const exportServerReport = async (format = 'csv') => {
     try {
-      const type = activeTab === 'balance' ? 'balance' : activeTab === 'pending' ? 'pending' : activeTab === 'trends' ? 'monthly' : 'department';
-      const res = await fetch(`${process.env.REACT_APP_API_BASE || 'http://localhost:5000/api'}/reports/export/${type}?year=${selectedYear}`, {
+      const type = getExportType();
+      const ext = format === 'xlsx' ? 'xlsx' : format === 'pdf' ? 'pdf' : 'csv';
+      const res = await fetch(`${process.env.REACT_APP_API_BASE || 'http://localhost:5000/api'}/reports/export/${type}?year=${selectedYear}&format=${format}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (!res.ok) throw new Error('Export failed');
@@ -165,11 +173,11 @@ function ReportsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${type}_report_${selectedYear}.csv`;
+      a.download = `${type}_report_${selectedYear}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Server export failed: ' + (err.message || err));
+      alert('Export failed: ' + (err.message || err));
     }
   };
 
@@ -326,13 +334,18 @@ function ReportsPage() {
           </div>
 
           <div className="report-controls-right">
-            <button className="btn btn-outline" onClick={() => exportCurrentTabAsCSV()}>
-              Export CSV
+            <button className="btn btn-outline" onClick={() => exportCurrentTabAsCSV()} title="Download as CSV">
+              📄 CSV
             </button>
             {activeTab !== 'applications' && (
-              <button className="btn btn-outline" onClick={() => exportServerCSV()}>
-                Export (server)
-              </button>
+              <>
+                <button className="btn btn-outline" onClick={() => exportServerReport('pdf')} title="Download as PDF">
+                  📕 PDF
+                </button>
+                <button className="btn btn-outline" onClick={() => exportServerReport('xlsx')} title="Download as Excel">
+                  📗 Excel
+                </button>
+              </>
             )}
           </div>
         </div>

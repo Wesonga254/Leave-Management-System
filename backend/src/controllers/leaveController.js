@@ -33,6 +33,49 @@ const calculateBusinessDays = async (db, startDate, endDate) => {
   return count;
 };
 
+/**
+ * Returns a detailed breakdown of working days between two dates,
+ * including how many weekends and public holidays were excluded.
+ */
+const calculateBusinessDaysDetailed = async (db, startDate, endDate) => {
+  const holidayRows = await db.all(
+    `SELECT date, name FROM public_holidays WHERE date BETWEEN ? AND ?`,
+    [formatDate(startDate), formatDate(endDate)]
+  );
+  const holidayMap = new Map((holidayRows || []).map(h => [formatDate(h.date), h.name || 'Public Holiday']));
+
+  let workingDays = 0;
+  let weekendDays = 0;
+  let holidayDays = 0;
+  const excludedHolidays = [];
+  let calendarDays = 0;
+
+  let d = new Date(`${formatDate(startDate)}T00:00:00`);
+  const ed = new Date(`${formatDate(endDate)}T00:00:00`);
+  while (d <= ed) {
+    calendarDays++;
+    const day = d.getDay();
+    const iso = formatDate(d);
+    if (day === 0 || day === 6) {
+      weekendDays++;
+    } else if (holidayMap.has(iso)) {
+      holidayDays++;
+      excludedHolidays.push({ date: iso, name: holidayMap.get(iso) });
+    } else {
+      workingDays++;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+
+  return {
+    calendarDays,
+    workingDays,
+    weekendDays,
+    holidayDays,
+    excludedHolidays
+  };
+};
+
 const OVERLAP_MESSAGE = 'You already have an active or pending leave application of the same type for overlapping dates. Please choose different dates or a different leave type.';
 
 const getOverlappingLeaveApplication = async (db, userId, leaveTypeId, startDate, endDate, excludeApplicationId = null) => {
@@ -248,8 +291,8 @@ const submitLeaveApplication = async (req, res) => {
         email: fullUser.email,
         phone: fullUser.phone,
         type: 'leave_submission',
-        title: 'Leave Request Submitted',
-        message: `Your ${leaveType.name} request from ${start_date} to ${end_date} has been submitted for approval.`,
+        title: 'Leave Submitted',
+        message: `Your ${leaveType.name} (${start_date} to ${end_date}) has been submitted and is pending approval.`,
         referenceId: result.lastID
       });
 
@@ -281,8 +324,8 @@ const submitLeaveApplication = async (req, res) => {
             email: firstApprover.email,
             phone: firstApprover.phone,
             type: 'leave_submission',
-            title: 'Leave awaiting your approval',
-            message: `${applicantName} submitted a leave request (${leaveType.name}) from ${start_date} to ${end_date}. Please review and approve or reject.`,
+            title: 'Pending Approval',
+            message: `${applicantName} has applied for ${leaveType.name} (${start_date} – ${end_date}). Please review.`,
             referenceId: result.lastID
           });
         }
@@ -295,8 +338,8 @@ const submitLeaveApplication = async (req, res) => {
             email: hr.email,
             phone: hr.phone,
             type: 'leave_submission_info',
-            title: 'New Leave Application Submitted',
-            message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+            title: 'Leave Application',
+            message: `${applicantName} has applied for ${leaveType.name} (${start_date} – ${end_date}). For your records.`,
             referenceId: result.lastID
           });
         }
@@ -312,8 +355,8 @@ const submitLeaveApplication = async (req, res) => {
                 email: director.email,
                 phone: director.phone,
                 type: 'leave_submission_info',
-                title: 'New Leave Application Submitted',
-                message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+                title: 'Leave Application',
+                message: `${applicantName} has applied for ${leaveType.name} (${start_date} – ${end_date}). For your records.`,
                 referenceId: result.lastID
               });
             }
@@ -328,8 +371,8 @@ const submitLeaveApplication = async (req, res) => {
               email: dir.email,
               phone: dir.phone,
               type: 'leave_submission_info',
-              title: 'New Leave Application Submitted',
-              message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date}. This is for your information — only the supervisor can act on this request.`,
+              title: 'Leave Application',
+              message: `${applicantName} has applied for ${leaveType.name} (${start_date} – ${end_date}). For your records.`,
               referenceId: result.lastID
             });
           }
@@ -341,8 +384,8 @@ const submitLeaveApplication = async (req, res) => {
           await notifyUser({
             userId: admin.id,
             type: 'leave_submission_info',
-            title: 'New Leave Application',
-            message: `${applicantName} submitted a ${leaveType.name} request from ${start_date} to ${end_date} (${numberOfDays} day(s)).`,
+            title: 'Leave Application',
+            message: `${applicantName} applied for ${leaveType.name} (${start_date} – ${end_date}, ${numberOfDays} day(s)).`,
             referenceId: result.lastID
           });
         }
@@ -355,8 +398,8 @@ const submitLeaveApplication = async (req, res) => {
             email: hr.email,
             phone: hr.phone,
             type: 'leave_hr_notice',
-            title: 'Leave Auto-Approved (No Supervisor)',
-            message: `${applicantName} submitted a ${leaveType.name} request (${start_date} to ${end_date}) with no assigned supervisor. The request was auto-approved. No HR action is required.`,
+            title: 'Leave Auto-Approved',
+            message: `${applicantName}'s ${leaveType.name} (${start_date} – ${end_date}) was auto-approved as no supervisor is assigned.`,
             referenceId: result.lastID
           });
         }
@@ -603,8 +646,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
             email: applicant.email,
             phone: applicant.phone,
             type: 'rejection',
-            title: 'Leave Request Rejected',
-            message: `Your leave request (${applicant.leave_type}) from ${applicant.start_date} to ${applicant.end_date} has been rejected. Reason: ${comments || 'No reason provided'}`,
+            title: 'Leave Not Approved',
+            message: `Your ${applicant.leave_type} (${applicant.start_date} – ${applicant.end_date}) was not approved.${comments ? ' Reason: ' + comments : ''}`,
             referenceId: id
           });
 
@@ -641,8 +684,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
               email: actionedApplication.email,
               phone: actionedApplication.phone,
               type: 'approval_step',
-              title: `${approval_level.replace(/_/g, ' ')} approval completed`,
-              message: `Your ${actionedApplication.leave_type} request from ${actionedApplication.start_date} to ${actionedApplication.end_date} was approved at the ${approval_level.replace(/_/g, ' ')} step and is awaiting the next approver.`,
+              title: 'Leave Progressing',
+              message: `Your ${actionedApplication.leave_type} (${actionedApplication.start_date} – ${actionedApplication.end_date}) has been approved at this level and moved to the next approver.`,
               referenceId: id
             });
           }
@@ -661,8 +704,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
               email: nextApprover.email,
               phone: nextApprover.phone,
               type: 'approval_request',
-              title: 'Leave awaiting your approval',
-              message: `${leaveAppDetail.applicant_first} has a ${leaveAppDetail.leave_type} request awaiting your approval from ${leaveAppDetail.start_date} to ${leaveAppDetail.end_date}.`,
+              title: 'Pending Approval',
+              message: `${leaveAppDetail.applicant_first}'s ${leaveAppDetail.leave_type} (${leaveAppDetail.start_date} – ${leaveAppDetail.end_date}) needs your approval.`,
               referenceId: id
             });
           }
@@ -681,8 +724,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
               email: leaveApp.applicant_email,
               phone: leaveApp.applicant_phone,
               type: 'approval',
-              title: 'Leave Request Approved',
-              message: `Your leave request (${leaveApp.leave_type}) from ${leaveApp.start_date} to ${leaveApp.end_date} has been approved by your supervisor.`,
+              title: 'Leave Approved',
+              message: `Your ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) has been approved. Enjoy your leave.`,
               referenceId: id
             });
 
@@ -696,8 +739,8 @@ const updateLeaveApplicationStatus = async (req, res) => {
                 email: hr.email,
                 phone: hr.phone,
                 type: 'leave_hr_notice',
-                title: 'Leave Approved by Supervisor',
-                message: `${applicantName} (${leaveApp.employee_id || 'N/A'}) had their ${leaveApp.leave_type} request (${leaveApp.start_date} to ${leaveApp.end_date}) approved by their supervisor. No HR action is required.`,
+                title: 'Leave Approved',
+                message: `${applicantName} (${leaveApp.employee_id || 'N/A'}) — ${leaveApp.leave_type} (${leaveApp.start_date} – ${leaveApp.end_date}) approved.`,
                 referenceId: id
               });
             }
@@ -939,8 +982,8 @@ const updateOwnLeaveApplication = async (req, res) => {
         email: req.user.email,
         phone: req.user.phone,
         type: 'leave_update',
-        title: 'Leave Request Updated',
-        message: `Your leave request has been updated to run from ${start_date} to ${end_date}.`,
+        title: 'Leave Updated',
+        message: `Your leave has been updated: ${start_date} – ${end_date}.`,
         referenceId: id
       });
     } catch (err) {
@@ -1176,8 +1219,8 @@ const cancelLeaveApplication = async (req, res) => {
       await notifyUser({
         userId: req.user.id,
         type: 'leave_cancelled',
-        title: 'Leave Request Cancelled',
-        message: `Your ${application.leave_type} request (${application.start_date} to ${application.end_date}) has been cancelled.`,
+        title: 'Leave Cancelled',
+        message: `Your ${application.leave_type} (${application.start_date} – ${application.end_date}) has been cancelled.`,
         referenceId: id
       });
 
@@ -1189,8 +1232,8 @@ const cancelLeaveApplication = async (req, res) => {
             userId: supervisor.id,
             email: supervisor.email,
             type: 'leave_cancelled',
-            title: 'Leave Request Cancelled',
-            message: `${applicantName} has cancelled their ${application.leave_type} request (${application.start_date} to ${application.end_date}).`,
+            title: 'Leave Cancelled',
+            message: `${applicantName} cancelled their ${application.leave_type} (${application.start_date} – ${application.end_date}).`,
             referenceId: id
           });
         }
@@ -1202,8 +1245,8 @@ const cancelLeaveApplication = async (req, res) => {
         await notifyUser({
           userId: admin.id,
           type: 'leave_cancelled',
-          title: 'Leave Request Cancelled',
-          message: `${applicantName} cancelled their ${application.leave_type} request (${application.start_date} to ${application.end_date}).`,
+          title: 'Leave Cancelled',
+          message: `${applicantName} cancelled their ${application.leave_type} (${application.start_date} – ${application.end_date}).`,
           referenceId: id
         });
       }
@@ -1481,6 +1524,24 @@ const sendFinalApprovalEmails = async (db, applicationId, approvedDays) => {
   }
 };
 
+/**
+ * Preview endpoint — returns detailed working-day breakdown for a date range.
+ * GET /leave/calculate-days?start=YYYY-MM-DD&end=YYYY-MM-DD
+ */
+const calculateDaysPreview = async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) {
+      return res.status(400).json({ success: false, message: 'start and end query parameters are required' });
+    }
+    const db = getDatabase();
+    const breakdown = await calculateBusinessDaysDetailed(db, start, end);
+    res.json({ success: true, data: breakdown });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   submitLeaveApplication,
   getLeaveApplications,
@@ -1494,5 +1555,6 @@ module.exports = {
   getAnalyticsTrends,
   getTeamStats,
   getCarryoverData,
-  sendFinalApprovalEmails
+  sendFinalApprovalEmails,
+  calculateDaysPreview
 };

@@ -137,6 +137,27 @@ function SystemActivityPage() {
     }
   };
 
+  const exportActivityLog = () => {
+    if (activities.length === 0) return;
+    const rows = activities.map(a => ({
+      Time: a.created_at,
+      User: a.user_name || '',
+      Action: a.action || '',
+      Category: a.category || '',
+      Details: (a.details || '').replace(/"/g, '""'),
+      IP: a.ip_address || ''
+    }));
+    const keys = Object.keys(rows[0]);
+    const csv = [keys.join(',')].concat(rows.map(r => keys.map(k => `"${r[k]}"`).join(','))).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `activity_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="dashboard-container admin-dashboard">
       <div className="dashboard-header admin-hero">
@@ -188,6 +209,16 @@ function SystemActivityPage() {
             onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
             id="activity-date-from"
           />
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={exportActivityLog}
+            disabled={activities.length === 0}
+            style={{ padding: '8px 16px', fontSize: 13, borderRadius: 8, whiteSpace: 'nowrap' }}
+            id="export-activity-log-btn"
+          >
+            📄 Export CSV
+          </button>
           <button
             type="button"
             className="btn btn-danger"

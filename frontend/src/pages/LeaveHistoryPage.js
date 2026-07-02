@@ -229,11 +229,29 @@ function LeaveHistoryPage() {
     return (app.workflow || []).find(step => ['approved', 'rejected'].includes(step.status));
   };
 
+  const exportCalendar = async () => {
+    try {
+      const response = await leaveService.getIcalExport();
+      const blob = new Blob([response.data], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leave_calendar_${filterYear || currentYear}.ics`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to export calendar: ' + (err.message || err));
+    }
+  };
+
   return (
     <div className="leave-History-container">
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 className="card-title">My Application</h2>
+          <button className="btn btn-outline" onClick={exportCalendar} title="Download approved leaves as .ics calendar file" style={{ padding: '6px 14px', fontSize: 13, borderRadius: 6 }}>
+            📅 Add to Calendar
+          </button>
         </div>
 
         {/* Statistics Cards */}

@@ -13,14 +13,12 @@ const listUsers = async (req, res) => {
     let query = `
       SELECT u.id, u.username, u.employee_id, u.first_name, u.middle_name, u.last_name, u.email, u.department, u.department_id, u.designation, u.role,
              u.gender, u.kra_number, u.date_of_birth, u.registration_status, u.verified_at, u.verification_notes, u.created_at,
-             COALESCE(
-               (SELECT dir.name FROM directorates dir WHERE dir.director_id = u.id LIMIT 1),
-               (SELECT dir.name FROM directorates dir
-                JOIN users sup ON sup.id = u.reporting_officer_id
-                WHERE dir.director_id = sup.id OR dir.director_id = (SELECT sup2.reporting_officer_id FROM users sup2 WHERE sup2.id = u.reporting_officer_id)
-                LIMIT 1)
-             ) as directorate_name
+             u.directorate_id, u.is_active, u.reporting_officer_id,
+             dir.name as directorate_name,
+             sup.first_name || ' ' || sup.last_name as supervisor_name
       FROM users u
+      LEFT JOIN directorates dir ON dir.id = u.directorate_id
+      LEFT JOIN users sup ON sup.id = u.reporting_officer_id
     `;
     const params = [];
 
@@ -94,9 +92,9 @@ const reviewRegistration = async (req, res) => {
 
     await db.run(
       `UPDATE users
-       SET registration_status = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP, verification_notes = ?, updated_at = CURRENT_TIMESTAMP
+       SET registration_status = ?, is_active = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP, verification_notes = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [status, req.user.id, notes || null, userId]
+      [status, status === 'approved' ? 1 : 0, req.user.id, notes || null, userId]
     );
 
     if (status === 'approved') {
@@ -108,6 +106,25 @@ const reviewRegistration = async (req, res) => {
       FROM users
       WHERE id = ?
     `, [userId]);
+
+    // Notify the user about their registration decision
+    if (updated) {
+      const fullName = [updated.first_name, updated.last_name].filter(Boolean).join(' ');
+      try {
+        await notifyUser({
+          userId: updated.id,
+          email: updated.email,
+          type: status === 'approved' ? 'registration_approved' : 'registration_rejected',
+          title: status === 'approved' ? 'Account Approved' : 'Registration Declined',
+          message: status === 'approved'
+            ? `Hi ${fullName}, your account is now active. You can log in to the Leave Management System.`
+            : `Hi ${fullName}, your registration was not approved.${notes ? ' Reason: ' + notes : ''} Contact your administrator for details.`,
+          referenceId: updated.id
+        });
+      } catch (err) {
+        console.error('Registration review notification error:', err.message);
+      }
+    }
 
     res.json({ success: true, data: updated, message: `Registration ${status}` });
   } catch (error) {
@@ -426,6 +443,7 @@ const createPrivilegedAccount = async (req, res) => {
       date_of_birth,
       department,
       directorate_id,
+      designation,
       reporting_officer_id,
       assigned_role
     } = req.body;
@@ -488,7 +506,7 @@ const createPrivilegedAccount = async (req, res) => {
         department,
         departmentId,
         directorate_id || null,
-        'Not Assigned',
+        designation || 'Not Assigned',
         reporting_officer_id || null,
         assigned_role,
         req.user.id

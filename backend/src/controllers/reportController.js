@@ -516,67 +516,130 @@ const toCSV = (rows) => {
   return [header].concat(lines).join('\n');
 };
 
-// Export endpoints
+// Fetch report data by type (shared between CSV/PDF/Excel formats)
+const fetchExportData = async (db, type, year, department) => {
+  if (type === 'balance') {
+    return db.all(`
+      SELECT u.employee_id, u.first_name, u.last_name, u.gender, u.department,
+             lt.name as leave_type, lb.total_days, lb.used_days, lb.remaining_days
+      FROM leave_balance lb
+      JOIN users u ON lb.user_id = u.id
+      JOIN leave_types lt ON lb.leave_type_id = lt.id
+      WHERE lb.year = ?
+        AND (lt.applicable_gender = 'All' OR LOWER(lt.applicable_gender) = LOWER(u.gender))
+      ORDER BY u.department, u.first_name
+    `, [year]);
+  }
+  if (type === 'pending') {
+    return db.all(`
+      SELECT la.id as application_id, u.employee_id, u.first_name, u.last_name,
+             u.department, lt.name as leave_type,
+             la.start_date, la.end_date, la.number_of_days,
+             aw.approval_level, aw.created_at as submitted_date,
+             CAST(julianday('now') - julianday(aw.created_at) AS INTEGER) as days_pending
+      FROM approval_workflow aw
+      JOIN leave_applications la ON aw.leave_application_id = la.id
+      JOIN users u ON la.user_id = u.id
+      JOIN leave_types lt ON la.leave_type_id = lt.id
+      WHERE aw.status = 'pending'
+      ORDER BY aw.created_at ASC
+    `);
+  }
+  if (type === 'department') {
+    return db.all(`
+      SELECT u.department,
+             COUNT(DISTINCT u.id) as total_employees,
+             COUNT(DISTINCT CASE WHEN la.status = 'approved' THEN la.id END) as approved_leaves,
+             SUM(CASE WHEN la.status = 'approved' THEN la.number_of_days ELSE 0 END) as total_days_approved,
+             COUNT(DISTINCT CASE WHEN la.status = 'pending' THEN la.id END) as pending_leaves,
+             COUNT(DISTINCT CASE WHEN la.status = 'rejected' THEN la.id END) as rejected_leaves,
+             lt.name as leave_type
+      FROM users u
+      LEFT JOIN leave_applications la ON u.id = la.user_id
+      LEFT JOIN leave_types lt ON la.leave_type_id = lt.id
+      WHERE STRFTIME('%Y', la.start_date) = ? OR la.start_date IS NULL
+      ${department ? 'AND u.department = ?' : ''}
+      GROUP BY u.department, lt.name
+      ORDER BY u.department, lt.name
+    `, department ? [year.toString(), department] : [year.toString()]);
+  }
+  if (type === 'monthly') {
+    const rows = await db.all(`
+      SELECT CAST(STRFTIME('%m', la.start_date) AS INTEGER) as month,
+             lt.name as leave_type,
+             COUNT(DISTINCT la.id) as total_applications,
+             COUNT(DISTINCT CASE WHEN la.status = 'approved' THEN la.id END) as approved_count,
+             COUNT(DISTINCT CASE WHEN la.status = 'rejected' THEN la.id END) as rejected_count,
+             COUNT(DISTINCT CASE WHEN la.status = 'pending' THEN la.id END) as pending_count,
+             SUM(CASE WHEN la.status = 'approved' THEN la.number_of_days ELSE 0 END) as approved_days
+      FROM leave_applications la
+      JOIN leave_types lt ON la.leave_type_id = lt.id
+      WHERE STRFTIME('%Y', la.start_date) = ?
+      GROUP BY month, lt.name
+      ORDER BY month ASC
+    `, [year.toString()]);
+    return rows.map(r => ({
+      ...r,
+      month_name: new Date(parseInt(year), (r.month || 1) - 1).toLocaleString('default', { month: 'long' })
+    }));
+  }
+  return null;
+};
+
+// Multi-format export: GET /reports/export/:type?format=pdf|xlsx|csv
 const exportReport = async (req, res) => {
   try {
     const db = getDatabase();
     const { type } = req.params;
-    let rows = [];
+    const format = (req.query.format || 'csv').toLowerCase();
     const year = req.query.year || new Date().getFullYear();
+    const department = req.query.department;
 
-    if (type === 'balance') {
-      rows = await db.all(`
-        SELECT u.employee_id, u.first_name, u.last_name, u.gender, u.department, lt.name as leave_type, lt.applicable_gender, lb.total_days, lb.used_days, lb.remaining_days
-        FROM leave_balance lb
-        JOIN users u ON lb.user_id = u.id
-        JOIN leave_types lt ON lb.leave_type_id = lt.id
-        WHERE lb.year = ?
-          AND (
-            lt.applicable_gender = 'All'
-            OR LOWER(lt.applicable_gender) = LOWER(u.gender)
-          )
-        ORDER BY u.department, u.first_name
-      `, [year]);
-    } else if (type === 'pending') {
-      rows = await db.all(`
-        SELECT la.id as application_id, u.employee_id, u.first_name, u.last_name, lt.name as leave_type, la.start_date, la.end_date, la.number_of_days, aw.approval_level, aw.created_at as submitted_date
-        FROM approval_workflow aw
-        JOIN leave_applications la ON aw.leave_application_id = la.id
-        JOIN users u ON la.user_id = u.id
-        JOIN leave_types lt ON la.leave_type_id = lt.id
-        WHERE aw.status = 'pending'
-        ORDER BY aw.created_at ASC
-      `);
-    } else if (type === 'department') {
-      const dept = req.query.department;
-      rows = await db.all(`
-        SELECT u.department, COUNT(DISTINCT u.id) as total_employees, COUNT(DISTINCT CASE WHEN la.status = 'approved' THEN la.id END) as approved_leaves, SUM(CASE WHEN la.status = 'approved' THEN la.number_of_days ELSE 0 END) as total_days_approved, lt.name as leave_type
-        FROM users u
-        LEFT JOIN leave_applications la ON u.id = la.user_id
-        LEFT JOIN leave_types lt ON la.leave_type_id = lt.id
-        WHERE STRFTIME('%Y', la.start_date) = ? OR la.start_date IS NULL
-        ${dept ? 'AND u.department = ?' : ''}
-        GROUP BY u.department, lt.name
-        ORDER BY u.department, lt.name
-      `, dept ? [year.toString(), dept] : [year.toString()]);
-    } else if (type === 'monthly') {
-      rows = await db.all(`
-        SELECT CAST(STRFTIME('%m', la.start_date) AS INTEGER) as month, lt.name as leave_type, COUNT(DISTINCT la.id) as total_applications, SUM(CASE WHEN la.status = 'approved' THEN la.number_of_days ELSE 0 END) as approved_days
-        FROM leave_applications la
-        JOIN leave_types lt ON la.leave_type_id = lt.id
-        WHERE STRFTIME('%Y', la.start_date) = ?
-        GROUP BY month, lt.name
-        ORDER BY month ASC
-      `, [year.toString()]);
-    } else {
-      return res.status(400).json({ success: false, message: 'Unknown export type' });
+    const rows = await fetchExportData(db, type, year, department);
+    if (rows === null) {
+      return res.status(400).json({ success: false, message: 'Unknown export type. Use: balance, pending, department, monthly' });
     }
 
+    // PDF format
+    if (format === 'pdf') {
+      const pdf = require('../utils/pdfGenerator');
+      let doc;
+      if (type === 'balance') doc = pdf.generateLeaveBalanceReport(rows, year);
+      else if (type === 'department') doc = pdf.generateDepartmentReport(rows, year);
+      else if (type === 'pending') doc = pdf.generatePendingApprovalsReport(rows);
+      else if (type === 'monthly') doc = pdf.generateMonthlyTrendsReport(rows, year);
+      else return res.status(400).json({ success: false, message: 'PDF not available for this report type' });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_report_${year}.pdf"`);
+      doc.pipe(res);
+      doc.end();
+      return;
+    }
+
+    // Excel format
+    if (format === 'xlsx') {
+      const excel = require('../utils/excelGenerator');
+      let workbook;
+      if (type === 'balance') workbook = await excel.generateLeaveBalanceExcel(rows, year);
+      else if (type === 'department') workbook = await excel.generateDepartmentExcel(rows, year);
+      else if (type === 'pending') workbook = await excel.generatePendingApprovalsExcel(rows);
+      else if (type === 'monthly') workbook = await excel.generateMonthlyTrendsExcel(rows, year);
+      else return res.status(400).json({ success: false, message: 'Excel not available for this report type' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_report_${year}.xlsx"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    }
+
+    // Default: CSV
     const csv = toCSV(rows);
     res.header('Content-Type', 'text/csv');
     res.attachment(`${type}_report_${year}.csv`);
     return res.send(csv);
   } catch (err) {
+    console.error('[Export] Error:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -589,8 +652,6 @@ module.exports = {
   getMonthlyLeaveTrends,
   getSummaryDashboard,
   getDirectorEmployees,
-  getDirectorLeaveDashboard
+  getDirectorLeaveDashboard,
+  exportReport
 };
-
-module.exports.exportReport = exportReport;
-

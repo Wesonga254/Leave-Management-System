@@ -114,29 +114,42 @@ function NotificationCenter() {
   };
 
   const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'leave_submission':
-      case 'leave_submission_info':
-        return '📝';
-      case 'approval':
-      case 'approval_step':
-      case 'leave_approved_info':
-      case 'leave_hr_notice':
-        return '✅';
-      case 'rejection':
-      case 'leave_rejected_info':
-        return '❌';
-      case 'approval_request':
-        return '⏳';
-      case 'leave_cancelled':
-        return '🚫';
-      case 'leave_update':
-        return '📋';
-      case 'leave_ending_reminder':
-        return '⏰';
-      default:
-        return '🔔';
-    }
+    const svgProps = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
+    const icons = {
+      submit: <svg {...svgProps}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+      check: <svg {...svgProps}><polyline points="20 6 9 17 4 12"/></svg>,
+      x: <svg {...svgProps}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+      clock: <svg {...svgProps}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+      slash: <svg {...svgProps}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>,
+      edit: <svg {...svgProps}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+      bell: <svg {...svgProps}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+      user: <svg {...svgProps}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+      key: <svg {...svgProps}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+    };
+    const colorMap = {
+      leave_submission: { bg: '#eff6ff', color: '#2563eb', icon: icons.submit },
+      leave_submission_info: { bg: '#eff6ff', color: '#2563eb', icon: icons.submit },
+      approval: { bg: '#dcfce7', color: '#16a34a', icon: icons.check },
+      approval_step: { bg: '#dcfce7', color: '#16a34a', icon: icons.check },
+      leave_approved_info: { bg: '#dcfce7', color: '#16a34a', icon: icons.check },
+      leave_hr_notice: { bg: '#dcfce7', color: '#16a34a', icon: icons.check },
+      rejection: { bg: '#fef2f2', color: '#dc2626', icon: icons.x },
+      leave_rejected_info: { bg: '#fef2f2', color: '#dc2626', icon: icons.x },
+      approval_request: { bg: '#fef3c7', color: '#d97706', icon: icons.clock },
+      leave_cancelled: { bg: '#f1f5f9', color: '#64748b', icon: icons.slash },
+      leave_update: { bg: '#eff6ff', color: '#2563eb', icon: icons.edit },
+      leave_ending_reminder: { bg: '#fff7ed', color: '#ea580c', icon: icons.bell },
+      new_registration: { bg: '#eff6ff', color: '#2563eb', icon: icons.user },
+      registration_approved: { bg: '#dcfce7', color: '#16a34a', icon: icons.check },
+      registration_rejected: { bg: '#fef2f2', color: '#dc2626', icon: icons.x },
+      account_created: { bg: '#f0fdf4', color: '#16a34a', icon: icons.key },
+    };
+    const entry = colorMap[type] || { bg: '#f1f5f9', color: '#64748b', icon: icons.bell };
+    return (
+      <span className="notif-icon-circle" style={{ background: entry.bg, color: entry.color }}>
+        {entry.icon}
+      </span>
+    );
   };
 
   return (
@@ -185,8 +198,8 @@ function NotificationCenter() {
               <div className="loading">Loading notifications...</div>
             ) : notifications.length === 0 ? (
               <div className="empty-state">
-                <p>No notifications yet</p>
-                <p className="empty-state-sub">You'll see updates here when leave applications are submitted, approved, or rejected.</p>
+                <p>Nothing here yet</p>
+                <p className="empty-state-sub">Updates about leave and account activity will show up here.</p>
               </div>
             ) : (
               <div className="notification-list">

@@ -14,7 +14,8 @@ const initialFormData = {
   employee_id: '',
   kra_number: '',
   department: '',
-  directorate: '',
+  directorate_id: '',
+  designation: '',
   email: '',
   phone: '',
   password: '',
@@ -83,7 +84,7 @@ function RegisterPage() {
       const next = { ...prev, [name]: value };
       // Reset directorate when department changes
       if (name === 'department') {
-        next.directorate = '';
+        next.directorate_id = '';
       }
       return next;
     });
@@ -136,7 +137,7 @@ function RegisterPage() {
     setLoading(true);
 
     try {
-      const { confirm_password, directorate, ...payload } = formData;
+      const { confirm_password, ...payload } = formData;
       const res = await authService.register(payload);
       setSuccess(res.data?.message || 'Registration submitted successfully! Your account is pending admin approval. You will be able to login once approved.');
       setFormData(initialFormData);
@@ -237,11 +238,11 @@ function RegisterPage() {
                 {validation.department && <span className="error-text">{validation.department}</span>}
               </div>
               <div className="form-group">
-                <label htmlFor="directorate">Directorate</label>
+                <label htmlFor="directorate_id">Directorate</label>
                 <select
-                  id="directorate"
-                  name="directorate"
-                  value={formData.directorate}
+                  id="directorate_id"
+                  name="directorate_id"
+                  value={formData.directorate_id}
                   onChange={handleChange}
                   disabled={!formData.department || filteredDirectorates.length === 0}
                 >
@@ -249,9 +250,23 @@ function RegisterPage() {
                     {!formData.department ? '— Select department first —' : filteredDirectorates.length === 0 ? '— No directorates —' : 'Select Directorate'}
                   </option>
                   {filteredDirectorates.map(dir => (
-                    <option key={dir.id} value={dir.name}>{dir.name}</option>
+                    <option key={dir.id} value={dir.id}>{dir.name}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="designation">Designation / Job Title</label>
+                <input
+                  type="text"
+                  id="designation"
+                  name="designation"
+                  placeholder="e.g. Senior Accountant, Clerk, ICT Officer"
+                  value={formData.designation}
+                  onChange={handleChange}
+                />
               </div>
             </div>
 
